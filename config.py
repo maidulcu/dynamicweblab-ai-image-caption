@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API Configuration
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"  # Bind to localhost by default for security
     api_port: int = 8000
-    debug: bool = True
+    debug: bool = False  # Disable debug in production
 
     # Anthropic Claude API
     anthropic_api_key: Optional[str] = None
@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     requests_per_day: int = 500
     images_per_day: int = 1000
     batch_limit: int = 50
+
+    # Security
+    admin_api_key: Optional[str] = None
+    allowed_origins: str = "http://localhost:3000,http://localhost:8000"
+    trust_proxy_headers: bool = False  # Set True only in production with trusted proxy
 
     class Config:
         env_file = ".env"

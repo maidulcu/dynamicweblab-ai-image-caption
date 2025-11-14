@@ -26,24 +26,26 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware
+# Add CORS middleware with secure configuration
+allowed_origins = settings.allowed_origins.split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=allowed_origins,  # Specific origins only
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],  # Only needed methods
     allow_headers=["*"],
 )
 
 # Add rate limiting middleware (FREE SERVICE PROTECTION)
-app.add_middleware(
-    RateLimitMiddleware,
-    requests_per_minute=10,    # 10 requests per minute per IP
-    requests_per_hour=100,     # 100 requests per hour per IP
-    requests_per_day=500,      # 500 requests per day per IP
-    images_per_day=1000,       # 1000 images per day per IP
-    batch_limit=50             # Max 50 images per batch (reduced from 100)
-)
+if settings.rate_limit_enabled:
+    app.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=settings.requests_per_minute,
+        requests_per_hour=settings.requests_per_hour,
+        requests_per_day=settings.requests_per_day,
+        images_per_day=settings.images_per_day,
+        batch_limit=settings.batch_limit
+    )
 
 # Include API routes
 app.include_router(router, prefix="/api/v1", tags=["Image Captioning"])
@@ -77,8 +79,11 @@ async def root():
                 "alt_text": "/api/v1/generate/alt-text",
                 "social_caption": "/api/v1/generate/social-caption",
                 "seo_metadata": "/api/v1/generate/seo-metadata",
-                "complete_package": "/api/v1/generate/complete"
-            }
+                "complete_package": "/api/v1/generate/complete",
+                "batch_upload": "/api/v1/batch/upload",
+                "rate_limit_status": "/api/v1/rate-limit/status"
+            },
+            "note": "This is a free service with rate limits. See /docs for details."
         }
 
 
@@ -88,6 +93,11 @@ async def startup_event():
     logger.info("Starting AI Image Caption API...")
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"Upload directory: {settings.upload_dir}")
+    logger.info(f"Rate limiting: {'enabled' if settings.rate_limit_enabled else 'disabled'}")
+    logger.info(f"Allowed origins: {settings.allowed_origins}")
+
+    if not settings.admin_api_key:
+        logger.warning("WARNING: ADMIN_API_KEY not set. Admin endpoints will be inaccessible.")
 
 
 @app.on_event("shutdown")

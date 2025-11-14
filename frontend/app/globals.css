@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+body {
+  @apply bg-gradient-to-br from-primary-500 to-purple-600 min-h-screen;
+}

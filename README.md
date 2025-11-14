@@ -1,9 +1,17 @@
 # AI Image Caption Generator
 
-An intelligent image captioning system that automatically generates:
+An intelligent image captioning system powered by BLIP and FastAPI that automatically generates:
 - **Alt-text** for accessibility and SEO
 - **Social media captions** optimized for different platforms
 - **SEO metadata** for improved search visibility
+- **Batch processing** for large inventories (up to 100 images at once)
+
+## Key Technologies
+
+- **BLIP** (Bootstrapping Language-Image Pre-training) for advanced image analysis
+- **FastAPI** for high-performance parallel processing
+- **Next.js** frontend with modern UI and bulk upload
+- **Batch processing** system for large-scale inventories
 
 ## Features
 
@@ -45,6 +53,17 @@ Keyword integration for improved search visibility and organic traffic generatio
 - Schema.org markup
 - Keyword analysis and recommendations
 
+### 4. Batch Processing
+Process up to 100 images simultaneously with real-time progress tracking and export capabilities.
+
+**Key Features:**
+- Parallel processing with configurable concurrency
+- Real-time progress updates
+- CSV and JSON export options
+- Success/failure tracking
+- Estimated completion time
+- Automatic retry logic
+
 ## Installation
 
 ### Prerequisites
@@ -76,22 +95,36 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
-5. **Run the application:**
+5. **Run the backend:**
 ```bash
 python main.py
 ```
 
 The API will be available at `http://localhost:8000`
 
+6. **Run the Next.js frontend (optional):**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:3000`
+
 ## Usage
 
-### Web Interface
+### Web Interfaces
 
-Access the web interface at `http://localhost:8000` to:
+**Legacy HTML Interface** (`http://localhost:8000`):
 1. Upload an image
 2. Enter product details (optional)
 3. Add SEO keywords (optional)
 4. Generate complete package with one click
+
+**Next.js Frontend** (`http://localhost:3000`):
+- **Home Page**: Feature overview and navigation
+- **Single Upload** (`/single`): Process individual images with full product details
+- **Batch Upload** (`/batch`): Upload up to 100 images with drag-and-drop, real-time progress tracking, and CSV/JSON export
 
 ### API Endpoints
 
@@ -183,6 +216,61 @@ Returns list of supported social media platforms.
 GET /api/v1/health
 ```
 
+#### 8. Batch Upload (Process Multiple Images)
+```bash
+POST /api/v1/batch/upload
+```
+
+**Parameters:**
+- `images` (files): List of image files (max 100)
+- `keywords` (string, optional): Comma-separated keywords
+- `platforms` (string): Comma-separated platforms (default: instagram,facebook,twitter)
+
+**Response:**
+```json
+{
+  "success": true,
+  "batch_id": "uuid-here",
+  "total_images": 25,
+  "status": "processing"
+}
+```
+
+#### 9. Check Batch Status
+```bash
+GET /api/v1/batch/status/{batch_id}
+```
+
+**Response:**
+```json
+{
+  "batch_id": "uuid",
+  "status": "processing",
+  "progress": {
+    "total": 25,
+    "processed": 15,
+    "successful": 14,
+    "failed": 1,
+    "percentage": 60,
+    "estimated_completion": "30s"
+  }
+}
+```
+
+#### 10. Get Batch Results
+```bash
+GET /api/v1/batch/results/{batch_id}
+```
+
+Returns complete results for all processed images.
+
+#### 11. Export Batch Results
+```bash
+GET /api/v1/batch/export/{batch_id}?format=csv
+```
+
+Download results as CSV or JSON file.
+
 ## API Documentation
 
 Interactive API documentation is available at:
@@ -191,13 +279,18 @@ Interactive API documentation is available at:
 
 ## Technology Stack
 
-- **Backend:** FastAPI (Python)
+- **Backend:** FastAPI (Python) with async support
 - **AI/ML:**
   - HuggingFace Transformers
   - BLIP (Bootstrapping Language-Image Pre-training)
-  - PyTorch
+  - PyTorch (with GPU acceleration)
 - **Image Processing:** PIL, OpenCV
-- **Frontend:** HTML, CSS, JavaScript (vanilla)
+- **Frontend:**
+  - Next.js 14 (App Router) with TypeScript
+  - Tailwind CSS for styling
+  - react-dropzone for drag-and-drop
+  - Legacy HTML/CSS/JavaScript interface
+- **Batch Processing:** Asyncio with semaphore-based concurrency control
 
 ## Project Structure
 
@@ -205,20 +298,33 @@ Interactive API documentation is available at:
 dynamicweblab-ai-image-caption/
 ├── core/
 │   ├── __init__.py
-│   ├── image_analyzer.py          # Core image analysis engine
+│   ├── image_analyzer.py          # Core image analysis engine (BLIP)
 │   ├── alt_text_generator.py      # Alt-text generation
 │   ├── social_caption_generator.py # Social media captions
-│   └── seo_optimizer.py           # SEO metadata optimization
+│   ├── seo_optimizer.py           # SEO metadata optimization
+│   └── batch_processor.py         # Batch processing with progress tracking
 ├── api/
 │   ├── __init__.py
-│   └── routes.py                  # API endpoints
+│   └── routes.py                  # API endpoints (single + batch)
+├── frontend/                      # Next.js frontend
+│   ├── app/
+│   │   ├── page.tsx              # Home page
+│   │   ├── single/
+│   │   │   └── page.tsx          # Single image upload
+│   │   └── batch/
+│   │       └── page.tsx          # Bulk upload with progress
+│   ├── package.json
+│   └── README.md
 ├── static/
-│   └── index.html                 # Web interface
+│   └── index.html                 # Legacy web interface
 ├── uploads/                       # Temporary upload directory
+├── batch_results/                 # Batch export directory
 ├── config.py                      # Configuration management
 ├── main.py                        # FastAPI application
 ├── requirements.txt               # Python dependencies
 ├── .env.example                   # Environment variables template
+├── Dockerfile                     # Docker configuration
+├── docker-compose.yml             # Docker Compose setup
 └── README.md                      # This file
 ```
 
@@ -250,8 +356,13 @@ FACEBOOK_MAX_LENGTH=63206
 
 - **Processing Time:** 2-5 seconds per image (depending on hardware)
 - **GPU Acceleration:** Automatically uses CUDA if available
-- **Batch Processing:** Supports multiple images
+- **Batch Processing:**
+  - Up to 100 images per batch
+  - 5 concurrent processing tasks (configurable)
+  - Real-time progress tracking
+  - Estimated completion time
 - **Concurrent Requests:** FastAPI async support
+- **Scalability:** Horizontal scaling with load balancers
 
 ## Best Practices
 

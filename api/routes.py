@@ -43,7 +43,12 @@ def get_image_analyzer():
     """Get or create ImageAnalyzer instance."""
     global _image_analyzer
     if _image_analyzer is None:
-        _image_analyzer = ImageAnalyzer(settings.caption_model)
+        _image_analyzer = ImageAnalyzer(
+            model_name=settings.caption_model,
+            use_moondream=settings.use_moondream,
+            moondream_model=settings.moondream_model,
+            moondream_revision=settings.moondream_revision
+        )
     return _image_analyzer
 
 

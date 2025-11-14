@@ -7,7 +7,7 @@ from pathlib import Path
 
 from api.routes import router
 from config import settings
-from middleware import RateLimitMiddleware
+from middleware import RateLimitMiddleware, SecurityHeadersMiddleware, RequestSizeLimitMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -22,9 +22,16 @@ app = FastAPI(
     title="AI Image Caption Generator",
     description="Automatic generation of alt-text, social media captions, and SEO metadata for images",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    # SECURITY: Disable API docs in production
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None
 )
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add request size limit middleware (prevent DoS via large requests)
+app.add_middleware(RequestSizeLimitMiddleware, max_request_size=50 * 1024 * 1024)  # 50MB
 
 # Add CORS middleware with secure configuration
 allowed_origins = settings.allowed_origins.split(",")
@@ -96,14 +103,35 @@ async def startup_event():
     logger.info(f"Rate limiting: {'enabled' if settings.rate_limit_enabled else 'disabled'}")
     logger.info(f"Allowed origins: {settings.allowed_origins}")
 
-    if not settings.admin_api_key:
-        logger.warning("WARNING: ADMIN_API_KEY not set. Admin endpoints will be inaccessible.")
+    # SECURITY: Validate critical environment variables for production
+    if not settings.debug:
+        if not settings.admin_api_key:
+            raise RuntimeError(
+                "CRITICAL: ADMIN_API_KEY must be set in production. "
+                "Set DEBUG=True for development or configure ADMIN_API_KEY."
+            )
+
+        if settings.allowed_origins == "*" or "http://localhost" in settings.allowed_origins:
+            raise RuntimeError(
+                "CRITICAL: ALLOWED_ORIGINS must be configured for production domains. "
+                "Current value includes localhost or wildcard."
+            )
+
+        logger.info("✓ Production environment validation passed")
+    else:
+        if not settings.admin_api_key:
+            logger.warning("WARNING: ADMIN_API_KEY not set. Admin endpoints will be inaccessible.")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     logger.info("Shutting down AI Image Caption API...")
+
+    # PERFORMANCE: Gracefully shutdown thread pool executor
+    from utils import shutdown_executor
+    shutdown_executor()
+    logger.info("✓ Thread pool executor shutdown complete")
 
 
 if __name__ == "__main__":

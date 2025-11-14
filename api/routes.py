@@ -87,6 +87,22 @@ def get_progress_tracker():
     return _progress_tracker
 
 
+@router.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring.
+
+    Returns:
+        Health status and service information
+    """
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "service": "AI Image Caption Generator",
+        "rate_limiting": "enabled" if settings.rate_limit_enabled else "disabled"
+    }
+
+
 @router.post("/analyze")
 async def analyze_image(
     request: Request,
@@ -129,8 +145,12 @@ async def analyze_image(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error analyzing image: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error analyzing image: {e}", exc_info=True)
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while processing image. Please try again later."
+        )
     finally:
         # SECURITY: Always cleanup temp files
         if file_path and file_path.exists():
@@ -204,7 +224,11 @@ async def generate_alt_text(
         raise
     except Exception as e:
         logger.error(f"Error generating alt-text: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
     finally:
         if file_path and file_path.exists():
             try:
@@ -284,7 +308,11 @@ async def generate_social_caption(
         raise
     except Exception as e:
         logger.error(f"Error generating social caption: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
     finally:
         if file_path and file_path.exists():
             try:
@@ -366,7 +394,11 @@ async def generate_seo_metadata(
         raise
     except Exception as e:
         logger.error(f"Error generating SEO metadata: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
     finally:
         if file_path and file_path.exists():
             try:
@@ -464,7 +496,11 @@ async def generate_complete_package(
         raise
     except Exception as e:
         logger.error(f"Error generating complete package: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
     finally:
         if file_path and file_path.exists():
             try:
@@ -511,26 +547,35 @@ async def rate_limit_status(request: Request):
 
 
 @router.get("/admin/analytics")
-async def admin_analytics(authorization: str = Header(None)):
+async def admin_analytics(request: Request, authorization: str = Header(None)):
     """Get usage analytics (admin only).
 
     Args:
+        request: Request object for logging
         authorization: Bearer token in Authorization header
 
     Returns:
         Usage statistics
     """
-    # SECURITY: Fixed hardcoded credentials
+    client_ip = get_client_ip(request)
+
+    # SECURITY: Fixed hardcoded credentials with logging
     if not authorization or not authorization.startswith("Bearer "):
+        logger.warning(f"SECURITY: Missing auth header from {client_ip}")
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
     token = authorization.replace("Bearer ", "")
 
     if not settings.admin_api_key:
+        logger.error("SECURITY: Admin API accessed but ADMIN_API_KEY not configured")
         raise HTTPException(status_code=503, detail="Admin API not configured")
 
     if token != settings.admin_api_key:
+        logger.warning(f"SECURITY: Failed admin authentication from {client_ip}")
         raise HTTPException(status_code=403, detail="Invalid credentials")
+
+    # Log successful admin access
+    logger.info(f"SECURITY: Admin analytics accessed from {client_ip}")
 
     rate_limiter = get_rate_limiter()
     analytics = await rate_limiter.get_analytics()
@@ -672,7 +717,11 @@ async def batch_upload(
         raise
     except Exception as e:
         logger.error(f"Error in batch upload: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
     finally:
         # SECURITY: Clean up batch directory if processing never started
         # (If processing started, batch_processor will clean it up)
@@ -717,7 +766,11 @@ async def batch_status(batch_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting batch status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
 
 
 @router.get("/batch/results/{batch_id}")
@@ -763,7 +816,11 @@ async def batch_results(batch_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error getting batch results: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )
 
 
 @router.get("/batch/export/{batch_id}")
@@ -796,4 +853,8 @@ async def batch_export(batch_id: str, format: str = "csv"):
         raise
     except Exception as e:
         logger.error(f"Error exporting batch: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal errors to users
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again later."
+        )

@@ -1,8 +1,8 @@
-"""API routes for the image caption service."""
+"""API routes for the image caption service - SECURITY HARDENED."""
 import os
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Header
+from fastapi.responses import JSONResponse, FileResponse
 from typing import Optional, List
 import aiofiles
 from pathlib import Path
@@ -12,6 +12,14 @@ from core import ImageAnalyzer, AltTextGenerator, SocialCaptionGenerator, SEOOpt
 from core.social_caption_generator import SocialPlatform
 from core.batch_processor import BatchProcessor, ProgressTracker
 from core.rate_limiter import get_rate_limiter
+from utils import (
+    validate_and_save_upload,
+    validate_input_text,
+    validate_batch_id,
+    get_client_ip,
+    MAX_FILE_SIZE,
+    MAX_BATCH_FILE_SIZE
+)
 from config import settings
 import uuid
 import asyncio
@@ -78,20 +86,9 @@ def get_progress_tracker():
     return _progress_tracker
 
 
-async def save_upload_file(upload_file: UploadFile, destination: Path) -> None:
-    """Save uploaded file to disk.
-
-    Args:
-        upload_file: Uploaded file
-        destination: Destination path
-    """
-    async with aiofiles.open(destination, 'wb') as f:
-        content = await upload_file.read()
-        await f.write(content)
-
-
 @router.post("/analyze")
 async def analyze_image(
+    request: Request,
     image: UploadFile = File(...),
     keywords: Optional[str] = Form(None),
     product_name: Optional[str] = Form(None),
@@ -101,6 +98,7 @@ async def analyze_image(
     """Analyze an image and return base analysis.
 
     Args:
+        request: Request object for IP extraction
         image: Image file to analyze
         keywords: Comma-separated keywords
         product_name: Product name
@@ -110,34 +108,40 @@ async def analyze_image(
     Returns:
         Image analysis results
     """
+    file_path = None
     try:
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-
-        # Save uploaded file
+        # SECURITY: Validate and save upload securely
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(exist_ok=True)
-
-        file_path = upload_dir / image.filename
-        await save_upload_file(image, file_path)
+        file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
         # Analyze image
         analyzer = get_image_analyzer()
         analysis = analyzer.analyze_image(str(file_path))
 
-        # Clean up file
-        file_path.unlink()
+        # SECURITY: Record image processing for rate limiting
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.record_request(client_ip, num_images=1)
 
         return JSONResponse(content={"success": True, "analysis": analysis})
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error analyzing image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # SECURITY: Always cleanup temp files
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {cleanup_error}")
 
 
 @router.post("/generate/alt-text")
 async def generate_alt_text(
+    request: Request,
     image: UploadFile = File(...),
     keywords: Optional[str] = Form(None),
     product_name: Optional[str] = Form(None),
@@ -146,53 +150,34 @@ async def generate_alt_text(
     product_material: Optional[str] = Form(None),
     product_style: Optional[str] = Form(None)
 ):
-    """Generate SEO-optimized alt-text for an image.
-
-    Args:
-        image: Image file
-        keywords: Comma-separated SEO keywords
-        product_name: Product name
-        product_category: Product category
-        product_brand: Product brand
-        product_material: Product material
-        product_style: Product style
-
-    Returns:
-        Generated alt-text with variations
-    """
+    """Generate SEO-optimized alt-text for an image."""
+    file_path = None
     try:
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-
-        # Save uploaded file
+        # SECURITY: Validate and save upload
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(exist_ok=True)
-
-        file_path = upload_dir / image.filename
-        await save_upload_file(image, file_path)
+        file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
         # Analyze image
         analyzer = get_image_analyzer()
         analysis = analyzer.analyze_image(str(file_path))
 
-        # Prepare product info
+        # SECURITY: Validate and sanitize inputs
         product_info = {}
         if product_name:
-            product_info["name"] = product_name
+            product_info["name"] = validate_input_text(product_name)
         if product_category:
-            product_info["category"] = product_category
+            product_info["category"] = validate_input_text(product_category)
         if product_brand:
-            product_info["brand"] = product_brand
+            product_info["brand"] = validate_input_text(product_brand)
         if product_material:
-            product_info["material"] = product_material
+            product_info["material"] = validate_input_text(product_material)
         if product_style:
-            product_info["style"] = product_style
+            product_info["style"] = validate_input_text(product_style)
 
         # Parse keywords
         keyword_list = None
         if keywords:
-            keyword_list = [k.strip() for k in keywords.split(',')]
+            keyword_list = [validate_input_text(k.strip()) for k in keywords.split(',')]
 
         # Generate alt-text
         alt_gen = get_alt_text_generator()
@@ -202,8 +187,10 @@ async def generate_alt_text(
             product_info=product_info if product_info else None
         )
 
-        # Clean up file
-        file_path.unlink()
+        # SECURITY: Record image processing
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.record_request(client_ip, num_images=1)
 
         return JSONResponse(content={
             "success": True,
@@ -211,13 +198,22 @@ async def generate_alt_text(
             "base_analysis": analysis
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating alt-text: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {cleanup_error}")
 
 
 @router.post("/generate/social-caption")
 async def generate_social_caption(
+    request: Request,
     image: UploadFile = File(...),
     platform: str = Form(...),
     product_name: Optional[str] = Form(None),
@@ -227,21 +223,8 @@ async def generate_social_caption(
     brand_voice: Optional[str] = Form(None),
     include_hashtags: bool = Form(True)
 ):
-    """Generate platform-optimized social media caption.
-
-    Args:
-        image: Image file
-        platform: Social media platform (instagram, twitter, facebook, etc.)
-        product_name: Product name
-        product_category: Product category
-        product_brand: Product brand
-        custom_message: Custom message to include
-        brand_voice: Brand voice/tone
-        include_hashtags: Whether to include hashtags
-
-    Returns:
-        Generated social media caption
-    """
+    """Generate platform-optimized social media caption."""
+    file_path = None
     try:
         # Validate platform
         try:
@@ -252,29 +235,25 @@ async def generate_social_caption(
                 detail=f"Invalid platform. Must be one of: {', '.join([p.value for p in SocialPlatform])}"
             )
 
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-
-        # Save uploaded file
+        # SECURITY: Validate and save upload
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(exist_ok=True)
-
-        file_path = upload_dir / image.filename
-        await save_upload_file(image, file_path)
+        file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
         # Analyze image
         analyzer = get_image_analyzer()
         analysis = analyzer.analyze_image(str(file_path))
 
-        # Prepare product info
+        # SECURITY: Validate inputs
         product_info = {}
         if product_name:
-            product_info["name"] = product_name
+            product_info["name"] = validate_input_text(product_name)
         if product_category:
-            product_info["category"] = product_category
+            product_info["category"] = validate_input_text(product_category)
         if product_brand:
-            product_info["brand"] = product_brand
+            product_info["brand"] = validate_input_text(product_brand)
+
+        # Validate custom message
+        safe_custom_message = validate_input_text(custom_message, max_length=500) if custom_message else None
 
         # Generate caption
         caption_gen = get_social_caption_generator()
@@ -284,11 +263,13 @@ async def generate_social_caption(
             product_info=product_info if product_info else None,
             brand_voice=brand_voice,
             include_hashtags=include_hashtags,
-            custom_message=custom_message
+            custom_message=safe_custom_message
         )
 
-        # Clean up file
-        file_path.unlink()
+        # SECURITY: Record image processing
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.record_request(client_ip, num_images=1)
 
         return JSONResponse(content={
             "success": True,
@@ -301,10 +282,17 @@ async def generate_social_caption(
     except Exception as e:
         logger.error(f"Error generating social caption: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {cleanup_error}")
 
 
 @router.post("/generate/seo-metadata")
 async def generate_seo_metadata(
+    request: Request,
     image: UploadFile = File(...),
     keywords: Optional[str] = Form(None),
     product_name: Optional[str] = Form(None),
@@ -313,51 +301,32 @@ async def generate_seo_metadata(
     product_material: Optional[str] = Form(None),
     url_slug: Optional[str] = Form(None)
 ):
-    """Generate comprehensive SEO metadata for an image.
-
-    Args:
-        image: Image file
-        keywords: Comma-separated target keywords
-        product_name: Product name
-        product_category: Product category
-        product_brand: Product brand
-        product_material: Product material
-        url_slug: URL slug for the product/image
-
-    Returns:
-        Complete SEO metadata package
-    """
+    """Generate comprehensive SEO metadata for an image."""
+    file_path = None
     try:
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-
-        # Save uploaded file
+        # SECURITY: Validate and save upload
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(exist_ok=True)
-
-        file_path = upload_dir / image.filename
-        await save_upload_file(image, file_path)
+        file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
         # Analyze image
         analyzer = get_image_analyzer()
         analysis = analyzer.analyze_image(str(file_path))
 
-        # Prepare product info
+        # SECURITY: Validate inputs
         product_info = {}
         if product_name:
-            product_info["name"] = product_name
+            product_info["name"] = validate_input_text(product_name)
         if product_category:
-            product_info["category"] = product_category
+            product_info["category"] = validate_input_text(product_category)
         if product_brand:
-            product_info["brand"] = product_brand
+            product_info["brand"] = validate_input_text(product_brand)
         if product_material:
-            product_info["material"] = product_material
+            product_info["material"] = validate_input_text(product_material)
 
         # Parse keywords
         keyword_list = None
         if keywords:
-            keyword_list = [k.strip() for k in keywords.split(',')]
+            keyword_list = [validate_input_text(k.strip()) for k in keywords.split(',')]
 
         # Generate alt-text first
         alt_gen = get_alt_text_generator()
@@ -374,11 +343,13 @@ async def generate_seo_metadata(
             alt_text_data["standard"],
             product_info=product_info if product_info else None,
             target_keywords=keyword_list,
-            url_slug=url_slug
+            url_slug=validate_input_text(url_slug, allow_commas=False) if url_slug else None
         )
 
-        # Clean up file
-        file_path.unlink()
+        # SECURITY: Record image processing
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.record_request(client_ip, num_images=1)
 
         return JSONResponse(content={
             "success": True,
@@ -387,13 +358,22 @@ async def generate_seo_metadata(
             "base_analysis": analysis
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating SEO metadata: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {cleanup_error}")
 
 
 @router.post("/generate/complete")
 async def generate_complete_package(
+    request: Request,
     image: UploadFile = File(...),
     keywords: Optional[str] = Form(None),
     product_name: Optional[str] = Form(None),
@@ -403,54 +383,34 @@ async def generate_complete_package(
     product_style: Optional[str] = Form(None),
     platforms: Optional[str] = Form("instagram,facebook,twitter")
 ):
-    """Generate complete package: alt-text, social captions, and SEO metadata.
-
-    Args:
-        image: Image file
-        keywords: Comma-separated keywords
-        product_name: Product name
-        product_category: Product category
-        product_brand: Product brand
-        product_material: Product material
-        product_style: Product style
-        platforms: Comma-separated list of platforms
-
-    Returns:
-        Complete content generation package
-    """
+    """Generate complete package: alt-text, social captions, and SEO metadata."""
+    file_path = None
     try:
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-
-        # Save uploaded file
+        # SECURITY: Validate and save upload
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(exist_ok=True)
-
-        file_path = upload_dir / image.filename
-        await save_upload_file(image, file_path)
+        file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
         # Analyze image
         analyzer = get_image_analyzer()
         analysis = analyzer.analyze_image(str(file_path))
 
-        # Prepare product info
+        # SECURITY: Validate inputs
         product_info = {}
         if product_name:
-            product_info["name"] = product_name
+            product_info["name"] = validate_input_text(product_name)
         if product_category:
-            product_info["category"] = product_category
+            product_info["category"] = validate_input_text(product_category)
         if product_brand:
-            product_info["brand"] = product_brand
+            product_info["brand"] = validate_input_text(product_brand)
         if product_material:
-            product_info["material"] = product_material
+            product_info["material"] = validate_input_text(product_material)
         if product_style:
-            product_info["style"] = product_style
+            product_info["style"] = validate_input_text(product_style)
 
         # Parse keywords
         keyword_list = None
         if keywords:
-            keyword_list = [k.strip() for k in keywords.split(',')]
+            keyword_list = [validate_input_text(k.strip()) for k in keywords.split(',')]
 
         # Parse platforms
         platform_list = [SocialPlatform(p.strip().lower()) for p in platforms.split(',')]
@@ -480,8 +440,10 @@ async def generate_complete_package(
             target_keywords=keyword_list
         )
 
-        # Clean up file
-        file_path.unlink()
+        # SECURITY: Record image processing
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.record_request(client_ip, num_images=1)
 
         return JSONResponse(content={
             "success": True,
@@ -491,9 +453,17 @@ async def generate_complete_package(
             "base_analysis": analysis
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating complete package: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {cleanup_error}")
 
 
 @router.get("/health")
@@ -519,20 +489,11 @@ async def list_platforms():
 
 @router.get("/rate-limit/status")
 async def rate_limit_status(request: Request):
-    """Get current rate limit status for the requesting IP.
-
-    Returns:
-        Rate limit quota and usage information
-    """
-    # Get client IP
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    if not client_ip:
-        client_ip = request.headers.get("X-Real-IP", "")
-    if not client_ip:
-        client_ip = request.client.host if request.client else "unknown"
-
+    """Get current rate limit status for the requesting IP."""
+    # SECURITY: Use secure IP extraction
+    client_ip = get_client_ip(request)
     rate_limiter = get_rate_limiter()
-    quota = rate_limiter.get_remaining_quota(client_ip)
+    quota = await rate_limiter.get_remaining_quota(client_ip)
 
     return {
         "ip": client_ip,
@@ -543,21 +504,29 @@ async def rate_limit_status(request: Request):
 
 
 @router.get("/admin/analytics")
-async def admin_analytics(api_key: str):
+async def admin_analytics(authorization: str = Header(None)):
     """Get usage analytics (admin only).
 
     Args:
-        api_key: Admin API key
+        authorization: Bearer token in Authorization header
 
     Returns:
         Usage statistics
     """
-    # Simple API key check (in production, use proper authentication)
-    if api_key != "admin_secret_key_change_in_production":
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    # SECURITY: Fixed hardcoded credentials
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+    token = authorization.replace("Bearer ", "")
+
+    if not settings.admin_api_key:
+        raise HTTPException(status_code=503, detail="Admin API not configured")
+
+    if token != settings.admin_api_key:
+        raise HTTPException(status_code=403, detail="Invalid credentials")
 
     rate_limiter = get_rate_limiter()
-    analytics = rate_limiter.get_analytics()
+    analytics = await rate_limiter.get_analytics()
 
     return {
         "analytics": analytics,
@@ -567,22 +536,15 @@ async def admin_analytics(api_key: str):
 
 @router.post("/batch/upload")
 async def batch_upload(
+    request: Request,
     images: List[UploadFile] = File(...),
     keywords: Optional[str] = Form(None),
     platforms: str = Form("instagram,facebook,twitter")
 ):
-    """Upload multiple images for batch processing.
-
-    Args:
-        images: List of image files
-        keywords: Comma-separated keywords (optional)
-        platforms: Comma-separated list of platforms
-
-    Returns:
-        Batch ID and processing status
-    """
+    """Upload multiple images for batch processing."""
+    batch_dir = None
     try:
-        # Check batch limit from configuration
+        # SECURITY: Check batch limit from configuration
         max_batch = settings.batch_limit
         if len(images) > max_batch:
             raise HTTPException(
@@ -592,24 +554,30 @@ async def batch_upload(
 
         # Generate batch ID
         batch_id = str(uuid.uuid4())
+        batch_dir = Path(settings.upload_dir) / batch_id
+        batch_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save uploaded files
-        upload_dir = Path(settings.upload_dir) / batch_id
-        upload_dir.mkdir(parents=True, exist_ok=True)
-
+        # SECURITY: Validate and save uploaded files
         saved_paths = []
         for idx, image in enumerate(images):
-            if not image.content_type.startswith('image/'):
+            try:
+                file_path = await validate_and_save_upload(
+                    image,
+                    batch_dir,
+                    MAX_BATCH_FILE_SIZE  # Smaller limit for batch
+                )
+                saved_paths.append(str(file_path))
+            except HTTPException as e:
+                logger.warning(f"Skipped invalid file {idx}: {e.detail}")
                 continue
 
-            file_path = upload_dir / f"{idx}_{image.filename}"
-            await save_upload_file(image, file_path)
-            saved_paths.append(str(file_path))
+        if not saved_paths:
+            raise HTTPException(status_code=400, detail="No valid images to process")
 
-        # Parse parameters
+        # SECURITY: Validate inputs
         keyword_list = None
         if keywords:
-            keyword_list = [k.strip() for k in keywords.split(',')]
+            keyword_list = [validate_input_text(k.strip()) for k in keywords.split(',')]
 
         platform_list = [SocialPlatform(p.strip().lower()) for p in platforms.split(',')]
 
@@ -676,6 +644,12 @@ async def batch_upload(
             )
         )
 
+        # SECURITY: Record batch processing (images counted separately as they complete)
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        # Record the request, images will be counted as they're processed
+        await rate_limiter.record_request(client_ip, num_images=0)
+
         return JSONResponse(content={
             "success": True,
             "batch_id": batch_id,
@@ -684,6 +658,8 @@ async def batch_upload(
             "message": f"Processing {len(saved_paths)} images. Use /batch/status/{batch_id} to check progress."
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in batch upload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -691,15 +667,12 @@ async def batch_upload(
 
 @router.get("/batch/status/{batch_id}")
 async def batch_status(batch_id: str):
-    """Get status of a batch processing job.
-
-    Args:
-        batch_id: Batch identifier
-
-    Returns:
-        Current batch status and progress
-    """
+    """Get status of a batch processing job."""
     try:
+        # SECURITY: Validate batch ID format
+        if not validate_batch_id(batch_id):
+            raise HTTPException(status_code=400, detail="Invalid batch ID format")
+
         batch_processor = get_batch_processor()
         progress_tracker = get_progress_tracker()
 
@@ -733,16 +706,13 @@ async def batch_status(batch_id: str):
 
 
 @router.get("/batch/results/{batch_id}")
-async def batch_results(batch_id: str):
-    """Get results of a completed batch.
-
-    Args:
-        batch_id: Batch identifier
-
-    Returns:
-        Complete batch results
-    """
+async def batch_results(batch_id: str, request: Request):
+    """Get results of a completed batch."""
     try:
+        # SECURITY: Validate batch ID
+        if not validate_batch_id(batch_id):
+            raise HTTPException(status_code=400, detail="Invalid batch ID format")
+
         batch_processor = get_batch_processor()
         batch_data = batch_processor.get_batch_status(batch_id)
 
@@ -754,6 +724,13 @@ async def batch_results(batch_id: str):
                 status_code=400,
                 detail="Batch processing not yet completed"
             )
+
+        # SECURITY: Record images for completed batch
+        client_ip = get_client_ip(request)
+        rate_limiter = get_rate_limiter()
+        successful_count = batch_data.get("successful", 0)
+        if successful_count > 0:
+            await rate_limiter.record_request(client_ip, num_images=successful_count)
 
         return JSONResponse(content={
             "success": True,
@@ -775,20 +752,13 @@ async def batch_results(batch_id: str):
 
 
 @router.get("/batch/export/{batch_id}")
-async def batch_export(
-    batch_id: str,
-    format: str = "csv"
-):
-    """Export batch results to file.
-
-    Args:
-        batch_id: Batch identifier
-        format: Export format (csv or json)
-
-    Returns:
-        Download link for exported file
-    """
+async def batch_export(batch_id: str, format: str = "csv"):
+    """Export batch results to file."""
     try:
+        # SECURITY: Validate batch ID
+        if not validate_batch_id(batch_id):
+            raise HTTPException(status_code=400, detail="Invalid batch ID format")
+
         if format not in ["csv", "json"]:
             raise HTTPException(
                 status_code=400,
@@ -801,7 +771,6 @@ async def batch_export(
         if not export_path:
             raise HTTPException(status_code=404, detail="Batch not found")
 
-        from fastapi.responses import FileResponse
         return FileResponse(
             export_path,
             media_type="text/csv" if format == "csv" else "application/json",

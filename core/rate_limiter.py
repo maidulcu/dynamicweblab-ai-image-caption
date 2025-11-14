@@ -1,6 +1,7 @@
 """Rate limiting and usage tracking to prevent API abuse."""
 import time
 import logging
+import asyncio
 from typing import Dict, Optional
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -35,6 +36,9 @@ class RateLimiter:
         self.requests_per_day = requests_per_day
         self.images_per_day = images_per_day
         self.batch_limit = batch_limit
+
+        # Thread safety
+        self._lock = asyncio.Lock()
 
         # In-memory storage (use Redis in production)
         self.request_history: Dict[str, list] = defaultdict(list)
@@ -71,7 +75,7 @@ class RateLimiter:
         except Exception as e:
             logger.error(f"Error saving analytics: {e}")
 
-    def check_rate_limit(self, ip: str, num_images: int = 1) -> tuple[bool, Optional[str]]:
+    async def check_rate_limit(self, ip: str, num_images: int = 1) -> tuple[bool, Optional[str]]:
         """Check if IP is within rate limits.
 
         Args:
@@ -81,91 +85,98 @@ class RateLimiter:
         Returns:
             Tuple of (is_allowed, error_message)
         """
-        # Check if IP is blocked
-        if ip in self.blocked_ips:
-            unblock_time = self.blocked_ips[ip]
-            if datetime.utcnow() < unblock_time:
-                remaining = (unblock_time - datetime.utcnow()).seconds
-                return False, f"IP temporarily blocked. Try again in {remaining} seconds."
+        async with self._lock:
+            # Check if IP is blocked
+            if ip in self.blocked_ips:
+                unblock_time = self.blocked_ips[ip]
+                if datetime.utcnow() < unblock_time:
+                    remaining = (unblock_time - datetime.utcnow()).seconds
+                    return False, f"IP temporarily blocked. Try again in {remaining} seconds."
+                else:
+                    del self.blocked_ips[ip]
+
+            current_time = time.time()
+
+            # Clean old requests
+            self._clean_old_requests(ip, current_time)
+
+            # Check batch size limit
+            if num_images > self.batch_limit:
+                return False, f"Batch size exceeds limit. Maximum {self.batch_limit} images per request."
+
+            # Check requests per minute
+            minute_ago = current_time - 60
+            recent_requests = [t for t in self.request_history[ip] if t > minute_ago]
+            if len(recent_requests) >= self.requests_per_minute:
+                return False, f"Rate limit exceeded: {self.requests_per_minute} requests per minute. Try again in {int(60 - (current_time - recent_requests[0]))} seconds."
+
+            # Check requests per hour
+            hour_ago = current_time - 3600
+            hour_requests = [t for t in self.request_history[ip] if t > hour_ago]
+            if len(hour_requests) >= self.requests_per_hour:
+                return False, f"Rate limit exceeded: {self.requests_per_hour} requests per hour. Try again later."
+
+            # Check requests per day
+            day_ago = current_time - 86400
+            day_requests = [t for t in self.request_history[ip] if t > day_ago]
+            if len(day_requests) >= self.requests_per_day:
+                return False, f"Daily limit reached: {self.requests_per_day} requests per day. Resets in {self._time_until_reset(day_requests[0], 86400)}."
+
+            # Check images per day
+            today = datetime.utcnow().date()
+            ip_data = self.image_count[ip]
+
+            if ip_data["date"] == str(today):
+                if ip_data["count"] + num_images > self.images_per_day:
+                    remaining = self.images_per_day - ip_data["count"]
+                    return False, f"Daily image limit reached: {self.images_per_day} images per day. You can process {remaining} more images today."
             else:
-                del self.blocked_ips[ip]
+                # Reset daily counter
+                ip_data["date"] = str(today)
+                ip_data["count"] = 0
 
-        current_time = time.time()
+            return True, None
 
-        # Clean old requests
-        self._clean_old_requests(ip, current_time)
-
-        # Check batch size limit
-        if num_images > self.batch_limit:
-            return False, f"Batch size exceeds limit. Maximum {self.batch_limit} images per request."
-
-        # Check requests per minute
-        minute_ago = current_time - 60
-        recent_requests = [t for t in self.request_history[ip] if t > minute_ago]
-        if len(recent_requests) >= self.requests_per_minute:
-            return False, f"Rate limit exceeded: {self.requests_per_minute} requests per minute. Try again in {int(60 - (current_time - recent_requests[0]))} seconds."
-
-        # Check requests per hour
-        hour_ago = current_time - 3600
-        hour_requests = [t for t in self.request_history[ip] if t > hour_ago]
-        if len(hour_requests) >= self.requests_per_hour:
-            return False, f"Rate limit exceeded: {self.requests_per_hour} requests per hour. Try again later."
-
-        # Check requests per day
-        day_ago = current_time - 86400
-        day_requests = [t for t in self.request_history[ip] if t > day_ago]
-        if len(day_requests) >= self.requests_per_day:
-            return False, f"Daily limit reached: {self.requests_per_day} requests per day. Resets in {self._time_until_reset(day_requests[0], 86400)}."
-
-        # Check images per day
-        today = datetime.utcnow().date()
-        ip_data = self.image_count[ip]
-
-        if ip_data["date"] == str(today):
-            if ip_data["count"] + num_images > self.images_per_day:
-                remaining = self.images_per_day - ip_data["count"]
-                return False, f"Daily image limit reached: {self.images_per_day} images per day. You can process {remaining} more images today."
-        else:
-            # Reset daily counter
-            ip_data["date"] = str(today)
-            ip_data["count"] = 0
-
-        return True, None
-
-    def record_request(self, ip: str, num_images: int = 1):
+    async def record_request(self, ip: str, num_images: int = 1):
         """Record a successful request.
 
         Args:
             ip: Client IP address
             num_images: Number of images processed
         """
-        current_time = time.time()
-        self.request_history[ip].append(current_time)
+        async with self._lock:
+            current_time = time.time()
+            self.request_history[ip].append(current_time)
 
-        # Update image count
-        today = datetime.utcnow().date()
-        ip_data = self.image_count[ip]
-        if ip_data["date"] != str(today):
-            ip_data["date"] = str(today)
-            ip_data["count"] = 0
-        ip_data["count"] += num_images
+            # Update image count
+            today = datetime.utcnow().date()
+            ip_data = self.image_count[ip]
+            if ip_data["date"] != str(today):
+                ip_data["date"] = str(today)
+                ip_data["count"] = 0
+            ip_data["count"] += num_images
 
-        # Save analytics periodically
-        if len(self.request_history[ip]) % 10 == 0:
-            self.save_analytics()
+            # Cleanup old data periodically
+            if len(self.request_history) % 1000 == 0:
+                self._cleanup_old_data()
 
-    def block_ip(self, ip: str, duration_minutes: int = 60):
+            # Save analytics periodically
+            if len(self.request_history[ip]) % 10 == 0:
+                self.save_analytics()
+
+    async def block_ip(self, ip: str, duration_minutes: int = 60):
         """Temporarily block an IP.
 
         Args:
             ip: IP address to block
             duration_minutes: Block duration in minutes
         """
-        unblock_time = datetime.utcnow() + timedelta(minutes=duration_minutes)
-        self.blocked_ips[ip] = unblock_time
-        logger.warning(f"Blocked IP {ip} until {unblock_time}")
+        async with self._lock:
+            unblock_time = datetime.utcnow() + timedelta(minutes=duration_minutes)
+            self.blocked_ips[ip] = unblock_time
+            logger.warning(f"Blocked IP {ip} until {unblock_time}")
 
-    def get_remaining_quota(self, ip: str) -> Dict:
+    async def get_remaining_quota(self, ip: str) -> Dict:
         """Get remaining quota for an IP.
 
         Args:
@@ -174,40 +185,41 @@ class RateLimiter:
         Returns:
             Dictionary with remaining quotas
         """
-        current_time = time.time()
-        self._clean_old_requests(ip, current_time)
+        async with self._lock:
+            current_time = time.time()
+            self._clean_old_requests(ip, current_time)
 
-        # Calculate remaining requests
-        minute_ago = current_time - 60
-        hour_ago = current_time - 3600
-        day_ago = current_time - 86400
+            # Calculate remaining requests
+            minute_ago = current_time - 60
+            hour_ago = current_time - 3600
+            day_ago = current_time - 86400
 
-        minute_requests = len([t for t in self.request_history[ip] if t > minute_ago])
-        hour_requests = len([t for t in self.request_history[ip] if t > hour_ago])
-        day_requests = len([t for t in self.request_history[ip] if t > day_ago])
+            minute_requests = len([t for t in self.request_history[ip] if t > minute_ago])
+            hour_requests = len([t for t in self.request_history[ip] if t > hour_ago])
+            day_requests = len([t for t in self.request_history[ip] if t > day_ago])
 
-        # Calculate remaining images
-        today = datetime.utcnow().date()
-        ip_data = self.image_count[ip]
-        images_today = ip_data["count"] if ip_data["date"] == str(today) else 0
+            # Calculate remaining images
+            today = datetime.utcnow().date()
+            ip_data = self.image_count[ip]
+            images_today = ip_data["count"] if ip_data["date"] == str(today) else 0
 
-        return {
-            "requests_remaining": {
-                "per_minute": max(0, self.requests_per_minute - minute_requests),
-                "per_hour": max(0, self.requests_per_hour - hour_requests),
-                "per_day": max(0, self.requests_per_day - day_requests)
-            },
-            "images_remaining": {
-                "per_day": max(0, self.images_per_day - images_today)
-            },
-            "limits": {
-                "requests_per_minute": self.requests_per_minute,
-                "requests_per_hour": self.requests_per_hour,
-                "requests_per_day": self.requests_per_day,
-                "images_per_day": self.images_per_day,
-                "batch_limit": self.batch_limit
+            return {
+                "requests_remaining": {
+                    "per_minute": max(0, self.requests_per_minute - minute_requests),
+                    "per_hour": max(0, self.requests_per_hour - hour_requests),
+                    "per_day": max(0, self.requests_per_day - day_requests)
+                },
+                "images_remaining": {
+                    "per_day": max(0, self.images_per_day - images_today)
+                },
+                "limits": {
+                    "requests_per_minute": self.requests_per_minute,
+                    "requests_per_hour": self.requests_per_hour,
+                    "requests_per_day": self.requests_per_day,
+                    "images_per_day": self.images_per_day,
+                    "batch_limit": self.batch_limit
+                }
             }
-        }
 
     def _clean_old_requests(self, ip: str, current_time: float):
         """Remove requests older than 24 hours.
@@ -240,27 +252,55 @@ class RateLimiter:
         else:
             return f"{minutes}m"
 
-    def get_analytics(self) -> Dict:
+    async def get_analytics(self) -> Dict:
         """Get overall usage analytics.
 
         Returns:
             Dictionary with usage statistics
         """
-        total_requests = sum(len(requests) for requests in self.request_history.values())
-        total_images = sum(data["count"] for data in self.image_count.values())
-        unique_ips = len(self.request_history)
-        blocked_count = len(self.blocked_ips)
+        async with self._lock:
+            total_requests = sum(len(requests) for requests in self.request_history.values())
+            total_images = sum(data["count"] for data in self.image_count.values())
+            unique_ips = len(self.request_history)
+            blocked_count = len(self.blocked_ips)
 
-        return {
-            "total_requests": total_requests,
-            "total_images_processed": total_images,
-            "unique_ips": unique_ips,
-            "blocked_ips": blocked_count,
-            "active_ips_today": len([
-                ip for ip, data in self.image_count.items()
-                if data["date"] == str(datetime.utcnow().date())
-            ])
+            return {
+                "total_requests": total_requests,
+                "total_images_processed": total_images,
+                "unique_ips": unique_ips,
+                "blocked_ips": blocked_count,
+                "active_ips_today": len([
+                    ip for ip, data in self.image_count.items()
+                    if data["date"] == str(datetime.utcnow().date())
+                ])
+            }
+
+    def _cleanup_old_data(self, max_age_days: int = 30):
+        """Clean up data older than max_age_days to prevent memory leaks.
+
+        Args:
+            max_age_days: Maximum age of data to keep in days
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=max_age_days)).date()
+
+        # Clean image counts
+        self.image_count = defaultdict(
+            lambda: {"count": 0, "date": None},
+            {
+                ip: data for ip, data in self.image_count.items()
+                if data.get("date") and
+                datetime.fromisoformat(data["date"]).date() >= cutoff_date
+            }
+        )
+
+        # Clean blocked IPs
+        now = datetime.utcnow()
+        self.blocked_ips = {
+            ip: time for ip, time in self.blocked_ips.items()
+            if time > now
         }
+
+        logger.info(f"Cleaned up old data. IPs tracked: {len(self.image_count)}, Blocked IPs: {len(self.blocked_ips)}")
 
 
 # Global rate limiter instance

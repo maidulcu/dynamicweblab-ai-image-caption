@@ -4,6 +4,7 @@ from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from core.rate_limiter import get_rate_limiter
+from utils import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in self.excluded_paths):
             return await call_next(request)
 
-        # Get client IP
-        client_ip = self._get_client_ip(request)
+        # Get client IP securely
+        client_ip = get_client_ip(request)
 
         # Determine number of images in request
         num_images = 1
@@ -47,13 +48,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             num_images = self.rate_limiter.batch_limit
 
         # Check rate limit
-        is_allowed, error_message = self.rate_limiter.check_rate_limit(client_ip, num_images)
+        is_allowed, error_message = await self.rate_limiter.check_rate_limit(client_ip, num_images)
 
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for IP {client_ip}: {error_message}")
 
             # Get remaining quota
-            quota = self.rate_limiter.get_remaining_quota(client_ip)
+            quota = await self.rate_limiter.get_remaining_quota(client_ip)
 
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -74,14 +75,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 }
             )
 
-        # Record request (will be updated with actual image count in route handler)
-        self.rate_limiter.record_request(client_ip, num_images=0)
-
-        # Process request
+        # Process request (image counting happens in route handlers after successful processing)
         response = await call_next(request)
 
         # Add rate limit headers to successful responses
-        quota = self.rate_limiter.get_remaining_quota(client_ip)
+        quota = await self.rate_limiter.get_remaining_quota(client_ip)
         response.headers["X-RateLimit-Limit-Minute"] = str(self.rate_limiter.requests_per_minute)
         response.headers["X-RateLimit-Limit-Hour"] = str(self.rate_limiter.requests_per_hour)
         response.headers["X-RateLimit-Limit-Day"] = str(self.rate_limiter.requests_per_day)
@@ -92,30 +90,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP address from request.
 
-        Args:
-            request: FastAPI request object
-
-        Returns:
-            Client IP address
-        """
-        # Check for forwarded IP (behind proxy/load balancer)
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-
-        # Check for real IP
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-
-        # Fall back to direct client
-        return request.client.host if request.client else "unknown"
-
-
-def record_image_processing(client_ip: str, num_images: int):
+async def record_image_processing(client_ip: str, num_images: int):
     """Record actual image processing after successful request.
 
     Args:
@@ -123,4 +99,4 @@ def record_image_processing(client_ip: str, num_images: int):
         num_images: Number of images processed
     """
     rate_limiter = get_rate_limiter()
-    rate_limiter.record_request(client_ip, num_images)
+    await rate_limiter.record_request(client_ip, num_images)

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Caption Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .upload-zone {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-zone:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-zone.dragover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-section {
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .result-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .result-content {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 10px;
+        }
+
+        .score-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .score-high {
+            background: #4caf50;
+            color: white;
+        }
+
+        .score-medium {
+            background: #ff9800;
+            color: white;
+        }
+
+        .score-low {
+            background: #f44336;
+            color: white;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .hashtag {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 10px;
+            border-radius: 15px;
+            margin: 4px;
+            font-size: 14px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI Image Caption Generator</h1>
+            <p>Generate alt-text, social media captions, and SEO metadata automatically</p>
+        </div>
+
+        <div class="card">
+            <div class="upload-zone" id="uploadZone">
+                <h3>Drop image here or click to upload</h3>
+                <p>Supports JPG, PNG, WebP</p>
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                <img id="preview" class="preview-image" style="display: none;">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="productName">Product Name</label>
+                    <input type="text" id="productName" placeholder="e.g., Cotton Dress">
+                </div>
+                <div class="form-group">
+                    <label for="productCategory">Category</label>
+                    <input type="text" id="productCategory" placeholder="e.g., Women's Fashion">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="productBrand">Brand</label>
+                    <input type="text" id="productBrand" placeholder="e.g., Your Brand">
+                </div>
+                <div class="form-group">
+                    <label for="productMaterial">Material</label>
+                    <input type="text" id="productMaterial" placeholder="e.g., Cotton">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="keywords">SEO Keywords (comma-separated)</label>
+                <input type="text" id="keywords" placeholder="e.g., fashion, dress, women, summer">
+            </div>
+
+            <button class="btn" id="generateBtn" onclick="generateComplete()">
+                Generate Complete Package
+            </button>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing image and generating content...</p>
+            </div>
+        </div>
+
+        <div class="results" id="results" style="display: none;">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('altText')">Alt Text</button>
+                <button class="tab" onclick="switchTab('social')">Social Captions</button>
+                <button class="tab" onclick="switchTab('seo')">SEO Metadata</button>
+            </div>
+
+            <div id="altTextTab" class="tab-content active">
+                <div class="result-section">
+                    <h3>Alt Text <span id="seoScore" class="score-badge"></span></h3>
+                    <div class="result-content" id="altTextStandard"></div>
+                    <div class="result-content" id="altTextShort"></div>
+                    <div class="result-content" id="altTextMedium"></div>
+                </div>
+            </div>
+
+            <div id="socialTab" class="tab-content">
+                <div class="result-section" id="socialCaptions"></div>
+            </div>
+
+            <div id="seoTab" class="tab-content">
+                <div class="result-section" id="seoMetadata"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const generateBtn = document.getElementById('generateBtn');
+
+        // Click to upload
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        // Drag and drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFile(file) {
+            if (file && file.type.startsWith('image/')) {
+                selectedFile = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function generateComplete() {
+            if (!selectedFile) {
+                alert('Please select an image first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+            formData.append('product_name', document.getElementById('productName').value);
+            formData.append('product_category', document.getElementById('productCategory').value);
+            formData.append('product_brand', document.getElementById('productBrand').value);
+            formData.append('product_material', document.getElementById('productMaterial').value);
+            formData.append('keywords', document.getElementById('keywords').value);
+            formData.append('platforms', 'instagram,facebook,twitter');
+
+            loading.classList.add('active');
+            generateBtn.disabled = true;
+            results.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/v1/generate/complete', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data);
+                    results.style.display = 'block';
+                } else {
+                    alert('Error generating content');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error connecting to API');
+            } finally {
+                loading.classList.remove('active');
+                generateBtn.disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            // Alt Text
+            const seoScore = data.alt_text.seo_score;
+            const scoreClass = seoScore >= 70 ? 'score-high' : seoScore >= 40 ? 'score-medium' : 'score-low';
+            document.getElementById('seoScore').className = `score-badge ${scoreClass}`;
+            document.getElementById('seoScore').textContent = `SEO Score: ${seoScore}`;
+
+            document.getElementById('altTextStandard').innerHTML =
+                `<strong>Standard:</strong> ${data.alt_text.standard}<br><small>${data.alt_text.length} characters</small>`;
+            document.getElementById('altTextShort').innerHTML =
+                `<strong>Short:</strong> ${data.alt_text.short}`;
+            document.getElementById('altTextMedium').innerHTML =
+                `<strong>Medium:</strong> ${data.alt_text.medium}`;
+
+            // Social Captions
+            const socialDiv = document.getElementById('socialCaptions');
+            socialDiv.innerHTML = '';
+            for (const [platform, caption] of Object.entries(data.social_captions)) {
+                const platformDiv = document.createElement('div');
+                platformDiv.className = 'result-content';
+                platformDiv.innerHTML = `
+                    <h4 style="text-transform: capitalize; color: #667eea;">${platform}</h4>
+                    <p>${caption.caption.replace(/\n/g, '<br>')}</p>
+                    <div style="margin-top: 10px;">
+                        ${caption.hashtags.map(tag => `<span class="hashtag">${tag}</span>`).join('')}
+                    </div>
+                    <small style="color: #666; display: block; margin-top: 10px;">
+                        Engagement Score: ${caption.engagement_score} | Length: ${caption.length} chars
+                    </small>
+                `;
+                socialDiv.appendChild(platformDiv);
+            }
+
+            // SEO Metadata
+            const seoDiv = document.getElementById('seoMetadata');
+            const seo = data.seo_metadata;
+            seoDiv.innerHTML = `
+                <div class="result-content">
+                    <strong>Filename:</strong> ${seo.filename}
+                </div>
+                <div class="result-content">
+                    <strong>Title Tag:</strong> ${seo.title}
+                </div>
+                <div class="result-content">
+                    <strong>Meta Description:</strong> ${seo.meta_description}
+                </div>
+                <div class="result-content">
+                    <strong>SEO Score:</strong> ${seo.seo_score}/100<br>
+                    <strong>Recommendations:</strong><br>
+                    ${seo.recommendations.map(rec => `• ${rec}`).join('<br>')}
+                </div>
+            `;
+        }
+
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tab + 'Tab').classList.add('active');
+        }
+    </script>
+</body>
+</html>

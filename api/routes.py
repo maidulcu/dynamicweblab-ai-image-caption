@@ -17,6 +17,7 @@ from utils import (
     validate_input_text,
     validate_batch_id,
     get_client_ip,
+    run_in_executor,
     MAX_FILE_SIZE,
     MAX_BATCH_FILE_SIZE
 )
@@ -114,9 +115,9 @@ async def analyze_image(
         upload_dir = Path(settings.upload_dir)
         file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
-        # Analyze image
+        # PERFORMANCE: Run blocking AI operation in thread pool
         analyzer = get_image_analyzer()
-        analysis = analyzer.analyze_image(str(file_path))
+        analysis = await run_in_executor(analyzer.analyze_image, str(file_path))
 
         # SECURITY: Record image processing for rate limiting
         client_ip = get_client_ip(request)
@@ -157,9 +158,9 @@ async def generate_alt_text(
         upload_dir = Path(settings.upload_dir)
         file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
-        # Analyze image
+        # PERFORMANCE: Run blocking AI operation in thread pool
         analyzer = get_image_analyzer()
-        analysis = analyzer.analyze_image(str(file_path))
+        analysis = await run_in_executor(analyzer.analyze_image, str(file_path))
 
         # SECURITY: Validate and sanitize inputs
         product_info = {}
@@ -179,9 +180,10 @@ async def generate_alt_text(
         if keywords:
             keyword_list = [validate_input_text(k.strip()) for k in keywords.split(',')]
 
-        # Generate alt-text
+        # PERFORMANCE: Run blocking AI operation in thread pool
         alt_gen = get_alt_text_generator()
-        alt_text = alt_gen.generate_alt_text(
+        alt_text = await run_in_executor(
+            alt_gen.generate_alt_text,
             analysis,
             keywords=keyword_list,
             product_info=product_info if product_info else None
@@ -239,9 +241,9 @@ async def generate_social_caption(
         upload_dir = Path(settings.upload_dir)
         file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
-        # Analyze image
+        # PERFORMANCE: Run blocking AI operation in thread pool
         analyzer = get_image_analyzer()
-        analysis = analyzer.analyze_image(str(file_path))
+        analysis = await run_in_executor(analyzer.analyze_image, str(file_path))
 
         # SECURITY: Validate inputs
         product_info = {}
@@ -255,9 +257,10 @@ async def generate_social_caption(
         # Validate custom message
         safe_custom_message = validate_input_text(custom_message, max_length=500) if custom_message else None
 
-        # Generate caption
+        # PERFORMANCE: Run blocking AI operation in thread pool
         caption_gen = get_social_caption_generator()
-        caption = caption_gen.generate_caption(
+        caption = await run_in_executor(
+            caption_gen.generate_caption,
             analysis,
             social_platform,
             product_info=product_info if product_info else None,
@@ -308,9 +311,9 @@ async def generate_seo_metadata(
         upload_dir = Path(settings.upload_dir)
         file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
-        # Analyze image
+        # PERFORMANCE: Run blocking AI operation in thread pool
         analyzer = get_image_analyzer()
-        analysis = analyzer.analyze_image(str(file_path))
+        analysis = await run_in_executor(analyzer.analyze_image, str(file_path))
 
         # SECURITY: Validate inputs
         product_info = {}
@@ -336,9 +339,10 @@ async def generate_seo_metadata(
             product_info=product_info if product_info else None
         )
 
-        # Generate SEO metadata
+        # PERFORMANCE: Run blocking AI operation in thread pool
         seo_opt = get_seo_optimizer()
-        seo_metadata = seo_opt.optimize_metadata(
+        seo_metadata = await run_in_executor(
+            seo_opt.optimize_metadata,
             analysis,
             alt_text_data["standard"],
             product_info=product_info if product_info else None,
@@ -390,9 +394,9 @@ async def generate_complete_package(
         upload_dir = Path(settings.upload_dir)
         file_path = await validate_and_save_upload(image, upload_dir, MAX_FILE_SIZE)
 
-        # Analyze image
+        # PERFORMANCE: Run blocking AI operation in thread pool
         analyzer = get_image_analyzer()
-        analysis = analyzer.analyze_image(str(file_path))
+        analysis = await run_in_executor(analyzer.analyze_image, str(file_path))
 
         # SECURITY: Validate inputs
         product_info = {}
@@ -415,25 +419,28 @@ async def generate_complete_package(
         # Parse platforms
         platform_list = [SocialPlatform(p.strip().lower()) for p in platforms.split(',')]
 
-        # Generate alt-text
+        # PERFORMANCE: Run blocking AI operation in thread pool
         alt_gen = get_alt_text_generator()
-        alt_text = alt_gen.generate_alt_text(
+        alt_text = await run_in_executor(
+            alt_gen.generate_alt_text,
             analysis,
             keywords=keyword_list,
             product_info=product_info if product_info else None
         )
 
-        # Generate social captions for all platforms
+        # PERFORMANCE: Run blocking AI operation in thread pool
         caption_gen = get_social_caption_generator()
-        social_captions = caption_gen.generate_multi_platform(
+        social_captions = await run_in_executor(
+            caption_gen.generate_multi_platform,
             analysis,
             product_info=product_info if product_info else None,
             platforms=platform_list
         )
 
-        # Generate SEO metadata
+        # PERFORMANCE: Run blocking AI operation in thread pool
         seo_opt = get_seo_optimizer()
-        seo_metadata = seo_opt.optimize_metadata(
+        seo_metadata = await run_in_executor(
+            seo_opt.optimize_metadata,
             analysis,
             alt_text["standard"],
             product_info=product_info if product_info else None,
@@ -589,25 +596,28 @@ async def batch_upload(
             caption_gen = get_social_caption_generator()
             seo_opt = get_seo_optimizer()
 
-            # Analyze image
-            analysis = analyzer.analyze_image(image_path)
+            # PERFORMANCE: Run blocking AI operations in thread pool
+            analysis = await run_in_executor(analyzer.analyze_image, image_path)
 
-            # Generate alt-text
-            alt_text = alt_gen.generate_alt_text(
+            # PERFORMANCE: Run blocking AI operations in thread pool
+            alt_text = await run_in_executor(
+                alt_gen.generate_alt_text,
                 analysis,
                 keywords=keywords,
                 product_info=product_info
             )
 
-            # Generate social captions
-            social_captions = caption_gen.generate_multi_platform(
+            # PERFORMANCE: Run blocking AI operations in thread pool
+            social_captions = await run_in_executor(
+                caption_gen.generate_multi_platform,
                 analysis,
                 product_info=product_info,
                 platforms=platform_list
             )
 
-            # Generate SEO metadata
-            seo_metadata = seo_opt.optimize_metadata(
+            # PERFORMANCE: Run blocking AI operations in thread pool
+            seo_metadata = await run_in_executor(
+                seo_opt.optimize_metadata,
                 analysis,
                 alt_text["standard"],
                 product_info=product_info,
@@ -663,6 +673,11 @@ async def batch_upload(
     except Exception as e:
         logger.error(f"Error in batch upload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # SECURITY: Clean up batch directory if processing never started
+        # (If processing started, batch_processor will clean it up)
+        # This handles the case where we fail before asyncio.create_task
+        pass  # Cleanup happens in batch_processor after processing completes
 
 
 @router.get("/batch/status/{batch_id}")

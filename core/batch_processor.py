@@ -1,6 +1,7 @@
 """Batch processing utilities for handling large image inventories."""
 import asyncio
 import logging
+import shutil
 from typing import List, Dict, Optional, Callable
 from pathlib import Path
 import csv
@@ -30,7 +31,8 @@ class BatchProcessor:
         product_infos: Optional[List[Dict]] = None,
         keywords: Optional[List[str]] = None,
         batch_id: Optional[str] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        cleanup_files: bool = True
     ) -> Dict:
         """Process multiple images in parallel batches.
 
@@ -41,6 +43,7 @@ class BatchProcessor:
             keywords: Common keywords for all images
             batch_id: Optional batch identifier
             progress_callback: Optional callback for progress updates
+            cleanup_files: Whether to delete files after processing
 
         Returns:
             Dictionary with batch results
@@ -49,6 +52,12 @@ class BatchProcessor:
             batch_id = str(uuid.uuid4())
 
         total_images = len(image_paths)
+        batch_dir = None
+
+        # Determine batch directory from first image path
+        if image_paths and cleanup_files:
+            first_path = Path(image_paths[0])
+            batch_dir = first_path.parent
 
         # Initialize batch tracking
         batch_data = {
@@ -65,63 +74,73 @@ class BatchProcessor:
 
         self.active_batches[batch_id] = batch_data
 
-        # Create processing tasks
-        semaphore = asyncio.Semaphore(self.max_concurrent)
+        try:
+            # Create processing tasks
+            semaphore = asyncio.Semaphore(self.max_concurrent)
 
-        async def process_with_semaphore(idx: int, image_path: str):
-            """Process single image with semaphore control."""
-            async with semaphore:
+            async def process_with_semaphore(idx: int, image_path: str):
+                """Process single image with semaphore control."""
+                async with semaphore:
+                    try:
+                        # Get product info if available
+                        product_info = None
+                        if product_infos and idx < len(product_infos):
+                            product_info = product_infos[idx]
+
+                        # Process image
+                        result = await process_func(
+                            image_path,
+                            product_info=product_info,
+                            keywords=keywords
+                        )
+
+                        # Update batch data
+                        batch_data["results"].append({
+                            "index": idx,
+                            "image_path": image_path,
+                            "success": True,
+                            "data": result
+                        })
+                        batch_data["successful"] += 1
+
+                    except Exception as e:
+                        logger.error(f"Error processing {image_path}: {e}")
+                        batch_data["errors"].append({
+                            "index": idx,
+                            "image_path": image_path,
+                            "error": str(e)
+                        })
+                        batch_data["failed"] += 1
+
+                    finally:
+                        batch_data["processed"] += 1
+
+                        # Call progress callback
+                        if progress_callback:
+                            await progress_callback(batch_data)
+
+            # Execute all tasks
+            tasks = [
+                process_with_semaphore(idx, path)
+                for idx, path in enumerate(image_paths)
+            ]
+
+            await asyncio.gather(*tasks)
+
+            # Finalize batch
+            batch_data["end_time"] = datetime.utcnow().isoformat()
+            batch_data["status"] = "completed"
+
+            return batch_data
+
+        finally:
+            # SECURITY: Clean up batch directory to prevent disk space leaks
+            if cleanup_files and batch_dir and batch_dir.exists():
                 try:
-                    # Get product info if available
-                    product_info = None
-                    if product_infos and idx < len(product_infos):
-                        product_info = product_infos[idx]
-
-                    # Process image
-                    result = await process_func(
-                        image_path,
-                        product_info=product_info,
-                        keywords=keywords
-                    )
-
-                    # Update batch data
-                    batch_data["results"].append({
-                        "index": idx,
-                        "image_path": image_path,
-                        "success": True,
-                        "data": result
-                    })
-                    batch_data["successful"] += 1
-
-                except Exception as e:
-                    logger.error(f"Error processing {image_path}: {e}")
-                    batch_data["errors"].append({
-                        "index": idx,
-                        "image_path": image_path,
-                        "error": str(e)
-                    })
-                    batch_data["failed"] += 1
-
-                finally:
-                    batch_data["processed"] += 1
-
-                    # Call progress callback
-                    if progress_callback:
-                        await progress_callback(batch_data)
-
-        # Execute all tasks
-        tasks = [
-            process_with_semaphore(idx, path)
-            for idx, path in enumerate(image_paths)
-        ]
-
-        await asyncio.gather(*tasks)
-
-        # Finalize batch
-        batch_data["end_time"] = datetime.utcnow().isoformat()
-        batch_data["status"] = "completed"
-
-        return batch_data
+                    shutil.rmtree(batch_dir)
+                    logger.info(f"Cleaned up batch directory: {batch_dir}")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup batch directory {batch_dir}: {cleanup_error}")
 
     def get_batch_status(self, batch_id: str) -> Optional[Dict]:
         """Get current status of a batch.

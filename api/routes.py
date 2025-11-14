@@ -1,15 +1,17 @@
 """API routes for the image caption service."""
 import os
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, List
 import aiofiles
 from pathlib import Path
+from datetime import datetime
 
 from core import ImageAnalyzer, AltTextGenerator, SocialCaptionGenerator, SEOOptimizer
 from core.social_caption_generator import SocialPlatform
 from core.batch_processor import BatchProcessor, ProgressTracker
+from core.rate_limiter import get_rate_limiter
 from config import settings
 import uuid
 import asyncio
@@ -515,6 +517,54 @@ async def list_platforms():
     }
 
 
+@router.get("/rate-limit/status")
+async def rate_limit_status(request: Request):
+    """Get current rate limit status for the requesting IP.
+
+    Returns:
+        Rate limit quota and usage information
+    """
+    # Get client IP
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.headers.get("X-Real-IP", "")
+    if not client_ip:
+        client_ip = request.client.host if request.client else "unknown"
+
+    rate_limiter = get_rate_limiter()
+    quota = rate_limiter.get_remaining_quota(client_ip)
+
+    return {
+        "ip": client_ip,
+        "quota": quota,
+        "message": "Free service with usage limits. Upgrade for higher limits.",
+        "documentation": "/docs"
+    }
+
+
+@router.get("/admin/analytics")
+async def admin_analytics(api_key: str):
+    """Get usage analytics (admin only).
+
+    Args:
+        api_key: Admin API key
+
+    Returns:
+        Usage statistics
+    """
+    # Simple API key check (in production, use proper authentication)
+    if api_key != "admin_secret_key_change_in_production":
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    rate_limiter = get_rate_limiter()
+    analytics = rate_limiter.get_analytics()
+
+    return {
+        "analytics": analytics,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
 @router.post("/batch/upload")
 async def batch_upload(
     images: List[UploadFile] = File(...),
@@ -532,10 +582,12 @@ async def batch_upload(
         Batch ID and processing status
     """
     try:
-        if len(images) > 100:
+        # Check batch limit from configuration
+        max_batch = settings.batch_limit
+        if len(images) > max_batch:
             raise HTTPException(
                 status_code=400,
-                detail="Maximum 100 images per batch"
+                detail=f"Maximum {max_batch} images per batch (free service limit)"
             )
 
         # Generate batch ID

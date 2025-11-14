@@ -43,6 +43,12 @@ Thumbs.db
 uploads/*
 !uploads/.gitkeep
 
+# Batch Results
+batch_results/
+
+# Usage Analytics
+usage_analytics.json
+
 # Models Cache
 models/
 .cache/

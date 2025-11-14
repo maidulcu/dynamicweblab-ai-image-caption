@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
 
+    # Rate Limiting (FREE SERVICE)
+    rate_limit_enabled: bool = True
+    requests_per_minute: int = 10
+    requests_per_hour: int = 100
+    requests_per_day: int = 500
+    images_per_day: int = 1000
+    batch_limit: int = 50
+
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from api.routes import router
 from config import settings
+from middleware import RateLimitMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,16 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Add rate limiting middleware (FREE SERVICE PROTECTION)
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=10,    # 10 requests per minute per IP
+    requests_per_hour=100,     # 100 requests per hour per IP
+    requests_per_day=500,      # 500 requests per day per IP
+    images_per_day=1000,       # 1000 images per day per IP
+    batch_limit=50             # Max 50 images per batch (reduced from 100)
 )
 
 # Include API routes

@@ -4,14 +4,22 @@ An intelligent image captioning system powered by BLIP and FastAPI that automati
 - **Alt-text** for accessibility and SEO
 - **Social media captions** optimized for different platforms
 - **SEO metadata** for improved search visibility
-- **Batch processing** for large inventories (up to 100 images at once)
+- **Batch processing** for large inventories (up to 50 images at once)
+
+## 🆓 Free Service with Rate Limits
+
+This is a **free, open-source service** with usage limits to prevent abuse:
+- **10 requests/minute** • **100 requests/hour** • **500 requests/day**
+- **1,000 images/day per IP** • **50 images max per batch**
+- See [RATE_LIMITS.md](RATE_LIMITS.md) for complete details
 
 ## Key Technologies
 
 - **BLIP** (Bootstrapping Language-Image Pre-training) for advanced image analysis
-- **FastAPI** for high-performance parallel processing
+- **FastAPI** for high-performance parallel processing with rate limiting
 - **Next.js** frontend with modern UI and bulk upload
 - **Batch processing** system for large-scale inventories
+- **IP-based rate limiting** to ensure fair usage
 
 ## Features
 
@@ -54,15 +62,16 @@ Keyword integration for improved search visibility and organic traffic generatio
 - Keyword analysis and recommendations
 
 ### 4. Batch Processing
-Process up to 100 images simultaneously with real-time progress tracking and export capabilities.
+Process up to 50 images simultaneously with real-time progress tracking and export capabilities.
 
 **Key Features:**
-- Parallel processing with configurable concurrency
-- Real-time progress updates
+- Parallel processing with configurable concurrency (5 concurrent tasks)
+- Real-time progress updates with polling
 - CSV and JSON export options
-- Success/failure tracking
+- Success/failure tracking per image
 - Estimated completion time
 - Automatic retry logic
+- Rate limit compliance (max 50 images per batch)
 
 ## Installation
 
@@ -271,6 +280,35 @@ GET /api/v1/batch/export/{batch_id}?format=csv
 
 Download results as CSV or JSON file.
 
+#### 12. Check Rate Limit Status
+```bash
+GET /api/v1/rate-limit/status
+```
+
+Returns your current rate limit quota and usage.
+
+## Rate Limits
+
+This is a free service with IP-based rate limiting:
+
+| Limit Type | Free Tier |
+|-----------|-----------|
+| Requests per minute | 10 |
+| Requests per hour | 100 |
+| Requests per day | 500 |
+| Images per day | 1,000 |
+| Max batch size | 50 |
+
+**Rate limit headers** are included in all responses:
+```
+X-RateLimit-Remaining-Minute: 8
+X-RateLimit-Remaining-Hour: 95
+X-RateLimit-Remaining-Day: 487
+X-RateLimit-Images-Remaining: 950
+```
+
+See [RATE_LIMITS.md](RATE_LIMITS.md) for complete documentation on rate limits, best practices, and handling rate limit errors.
+
 ## API Documentation
 
 Interactive API documentation is available at:
@@ -357,10 +395,12 @@ FACEBOOK_MAX_LENGTH=63206
 - **Processing Time:** 2-5 seconds per image (depending on hardware)
 - **GPU Acceleration:** Automatically uses CUDA if available
 - **Batch Processing:**
-  - Up to 100 images per batch
+  - Up to 50 images per batch (free tier limit)
   - 5 concurrent processing tasks (configurable)
-  - Real-time progress tracking
-  - Estimated completion time
+  - Real-time progress tracking every 2 seconds
+  - Estimated completion time calculation
+  - ~2-5 minutes for 50 images
+- **Rate Limiting:** IP-based with minimal overhead
 - **Concurrent Requests:** FastAPI async support
 - **Scalability:** Horizontal scaling with load balancers
 

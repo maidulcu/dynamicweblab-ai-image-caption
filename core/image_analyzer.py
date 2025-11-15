@@ -15,7 +15,8 @@ class ImageAnalyzer:
         model_name: str = "Salesforce/blip-image-captioning-large",
         use_moondream: bool = True,
         moondream_model: str = "vikhyatk/moondream2",
-        moondream_revision: str = "2025-06-21"
+        moondream_revision: str = "2025-06-21",
+        moondream_api_key: Optional[str] = None
     ):
         """Initialize the image analyzer with specified model.
 
@@ -24,36 +25,54 @@ class ImageAnalyzer:
             use_moondream: Whether to use Moondream if available (better quality)
             moondream_model: Moondream model identifier
             moondream_revision: Moondream model revision
+            moondream_api_key: Moondream Cloud API key (optional)
         """
         self.blip_model_name = model_name
         self.use_moondream = use_moondream
         self.moondream_model_name = moondream_model
         self.moondream_revision = moondream_revision
+        self.moondream_api_key = moondream_api_key
 
         self.processor = None
         self.model = None
-        self.model_type = None  # 'moondream' or 'blip'
+        self.cloud_model = None  # For Moondream Cloud API
+        self.model_type = None  # 'moondream_cloud', 'moondream_local', or 'blip'
         self.device = None
 
         self._load_model()
 
     def _load_model(self):
-        """Load Moondream (preferred) or BLIP model."""
-        # Detect device
-        if torch.cuda.is_available():
-            self.device = "cuda"
-            logger.info("GPU detected - CUDA available")
-        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            self.device = "mps"  # Apple Silicon
-            logger.info("GPU detected - Apple Silicon (MPS) available")
-        else:
-            self.device = "cpu"
-            logger.info("No GPU detected - using CPU")
-
-        # Try loading Moondream first (better quality)
-        if self.use_moondream:
+        """Load Moondream Cloud, Moondream Local, or BLIP model."""
+        # Priority 1: Try Moondream Cloud API if API key provided
+        if self.moondream_api_key and self.use_moondream:
             try:
-                logger.info(f"Attempting to load Moondream model: {self.moondream_model_name}")
+                logger.info("Attempting to load Moondream Cloud API...")
+                import moondream as md
+
+                self.cloud_model = md.vl(api_key=self.moondream_api_key)
+                self.model_type = "moondream_cloud"
+                logger.info("✓ Moondream Cloud API initialized successfully")
+                logger.info("Using Moondream Cloud for superior image understanding")
+                return
+
+            except Exception as e:
+                logger.warning(f"Failed to initialize Moondream Cloud API (will try local): {e}")
+
+        # Priority 2: Try Local Moondream if enabled
+        if self.use_moondream:
+            # Detect device for local inference
+            if torch.cuda.is_available():
+                self.device = "cuda"
+                logger.info("GPU detected - CUDA available")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self.device = "mps"  # Apple Silicon
+                logger.info("GPU detected - Apple Silicon (MPS) available")
+            else:
+                self.device = "cpu"
+                logger.info("No GPU detected - using CPU")
+
+            try:
+                logger.info(f"Attempting to load local Moondream model: {self.moondream_model_name}")
                 from transformers import AutoModelForCausalLM
 
                 self.model = AutoModelForCausalLM.from_pretrained(
@@ -64,18 +83,27 @@ class ImageAnalyzer:
                     device_map={"": self.device}
                 )
 
-                self.model_type = "moondream"
-                logger.info(f"✓ Moondream model loaded successfully on {self.device.upper()}")
-                logger.info("Using Moondream for superior image understanding")
+                self.model_type = "moondream_local"
+                logger.info(f"✓ Local Moondream model loaded successfully on {self.device.upper()}")
+                logger.info("Using local Moondream for superior image understanding")
                 return
 
             except Exception as e:
-                logger.warning(f"Failed to load Moondream (will fallback to BLIP): {e}")
+                logger.warning(f"Failed to load local Moondream (will fallback to BLIP): {e}")
 
-        # Fallback to BLIP
+        # Priority 3: Fallback to BLIP
         try:
             logger.info(f"Loading BLIP model: {self.blip_model_name}")
             from transformers import BlipProcessor, BlipForConditionalGeneration
+
+            # Detect device if not already set
+            if self.device is None:
+                if torch.cuda.is_available():
+                    self.device = "cuda"
+                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    self.device = "mps"
+                else:
+                    self.device = "cpu"
 
             self.processor = BlipProcessor.from_pretrained(self.blip_model_name)
             self.model = BlipForConditionalGeneration.from_pretrained(self.blip_model_name)
@@ -138,16 +166,18 @@ class ImageAnalyzer:
             Generated caption string
         """
         try:
-            if self.model_type == "moondream":
-                return self._generate_caption_moondream(image)
+            if self.model_type == "moondream_cloud":
+                return self._generate_caption_moondream_cloud(image)
+            elif self.model_type == "moondream_local":
+                return self._generate_caption_moondream_local(image)
             else:
                 return self._generate_caption_blip(image)
         except Exception as e:
             logger.error(f"Error generating caption: {e}")
             return "Image"
 
-    def _generate_caption_moondream(self, image: Image.Image) -> str:
-        """Generate caption using Moondream model.
+    def _generate_caption_moondream_cloud(self, image: Image.Image) -> str:
+        """Generate caption using Moondream Cloud API.
 
         Args:
             image: PIL Image object
@@ -156,7 +186,26 @@ class ImageAnalyzer:
             Generated caption string
         """
         try:
-            # Moondream has built-in caption method
+            # Moondream Cloud API call
+            result = self.cloud_model.caption(image)
+            caption = result.get("caption", "Image")
+            return caption
+
+        except Exception as e:
+            logger.error(f"Error with Moondream Cloud caption: {e}")
+            return "Image"
+
+    def _generate_caption_moondream_local(self, image: Image.Image) -> str:
+        """Generate caption using local Moondream model.
+
+        Args:
+            image: PIL Image object
+
+        Returns:
+            Generated caption string
+        """
+        try:
+            # Local Moondream has built-in caption method
             result = self.model.caption(
                 image,
                 length="normal"  # Options: short, normal, long
@@ -165,7 +214,7 @@ class ImageAnalyzer:
             return caption
 
         except Exception as e:
-            logger.error(f"Error with Moondream caption: {e}")
+            logger.error(f"Error with local Moondream caption: {e}")
             return "Image"
 
     def _generate_caption_blip(self, image: Image.Image) -> str:
@@ -204,16 +253,25 @@ class ImageAnalyzer:
         Returns:
             Answer string
         """
-        if self.model_type != "moondream":
-            logger.warning("Query feature only available with Moondream model")
-            return "Query feature not available with current model"
+        if self.model_type == "moondream_cloud":
+            try:
+                result = self.cloud_model.query(image, question)
+                return result.get("answer", "Unable to answer")
+            except Exception as e:
+                logger.error(f"Error querying image (cloud): {e}")
+                return "Error processing query"
 
-        try:
-            result = self.model.query(image, question)
-            return result.get("answer", "Unable to answer")
-        except Exception as e:
-            logger.error(f"Error querying image: {e}")
-            return "Error processing query"
+        elif self.model_type == "moondream_local":
+            try:
+                result = self.model.query(image, question)
+                return result.get("answer", "Unable to answer")
+            except Exception as e:
+                logger.error(f"Error querying image (local): {e}")
+                return "Error processing query"
+
+        else:
+            logger.warning("Query feature only available with Moondream")
+            return "Query feature not available with current model"
 
     def _detect_colors(self, image: Image.Image, num_colors: int = 3) -> List[str]:
         """Detect dominant colors in the image.

@@ -47,7 +47,8 @@ def get_image_analyzer():
             model_name=settings.caption_model,
             use_moondream=settings.use_moondream,
             moondream_model=settings.moondream_model,
-            moondream_revision=settings.moondream_revision
+            moondream_revision=settings.moondream_revision,
+            moondream_api_key=settings.moondream_api_key
         )
     return _image_analyzer
 

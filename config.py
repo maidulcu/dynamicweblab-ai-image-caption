@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     use_moondream: bool = True  # Use Moondream if available (better quality)
     moondream_model: str = "vikhyatk/moondream2"  # Moondream model version
     moondream_revision: str = "2025-06-21"  # Latest stable revision
+    moondream_api_key: Optional[str] = None  # Moondream Cloud API key (optional)
 
     # SEO Configuration
     default_keywords: str = "product,shop,buy,online,quality"

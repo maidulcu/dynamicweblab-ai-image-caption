@@ -2,20 +2,56 @@
 
 ## Overview
 
-Your AI Image Caption Generator now supports **Moondream 2** - a superior vision language model that provides better image understanding than BLIP. This guide will help you set up Moondream on your gaming PC for optimal performance.
+Your AI Image Caption Generator now supports **Moondream 2** in **two modes**:
+1. **Local GPU Inference** (Free, Private, Fast on your gaming PC)
+2. **Cloud API** (Free $5/month credits, No GPU needed)
+
+This gives you maximum flexibility based on your needs!
 
 ---
 
-## 🎮 Why Moondream is Perfect for Your Gaming PC Setup
+## 🎯 Choose Your Deployment Mode
 
-✅ **GPU Accelerated** - Uses your gaming GPU for fast inference
-✅ **Better Quality** - More accurate and detailed captions than BLIP
-✅ **$0 Cost** - Completely free local inference
+### **Option 1: Local GPU Inference** (Recommended for Gaming PC)
+
+✅ **$0 Cost** - Completely free, no API fees
+✅ **GPU Accelerated** - Fast inference on your GPU
 ✅ **Complete Privacy** - Data never leaves your PC
-✅ **No API Limits** - Process unlimited images
-✅ **Advanced Features** - Supports Q&A about images
+✅ **No Rate Limits** - Process unlimited images
+✅ **Best for:** Gaming PC with GPU, public deployment
+
+**.env Configuration:**
+```bash
+USE_MOONDREAM=True
+MOONDREAM_API_KEY=     # Leave blank for local
+```
+
+### **Option 2: Moondream Cloud API**
+
+✅ **No GPU Required** - Works on any machine
+✅ **$5 Free Monthly** - Free credits to start
+✅ **Fast Setup** - No model download
+✅ **Auto Scaling** - Handles any load
+✅ **Best for:** Testing, no GPU, cloud deployment
+
+**.env Configuration:**
+```bash
+USE_MOONDREAM=True
+MOONDREAM_API_KEY=your_api_key_here  # Get from https://console.moondream.ai/
+```
+
+### **Automatic Fallback Chain**
+
+The system tries in this order:
+1. **Moondream Cloud** (if API key set)
+2. **Moondream Local** (if GPU available)
+3. **BLIP** (fallback)
 
 ---
+
+## 🎮 Local GPU Setup (For Your Gaming PC)
+
+Perfect for running on your gaming PC and hosting publicly!
 
 ## 🚀 Quick Start
 

@@ -21,6 +21,13 @@ An intelligent image captioning system that generates **SEO-optimized alt-text**
 
 ![Architecture](https://img.shields.io/badge/Architecture-Moondream%20%2B%20BLIP%20%2B%20FastAPI-blueviolet)
 
+<br>
+
+<div align="center">
+  <img src="screenshots/demo.png" alt="AI Image Caption Generator - Demo Screenshot" width="800" />
+  <p><em>AI Image Caption Generator — Drag-and-drop interface with real-time caption generation</em></p>
+</div>
+
 ---
 
 ## Why Choose This Project?

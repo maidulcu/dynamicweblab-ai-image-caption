@@ -1,157 +1,171 @@
+<div align="center">
+
 # AI Image Caption Generator
 
-An intelligent image captioning system powered by BLIP and FastAPI that automatically generates:
-- **Alt-text** for accessibility and SEO
-- **Social media captions** optimized for different platforms
-- **SEO metadata** for improved search visibility
-- **Batch processing** for large inventories (up to 50 images at once)
+**Automated alt-text, social media captions, and SEO metadata for product images — powered by Moondream & BLIP vision models.**
 
-## 🆓 Free Service with Rate Limits
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-000000.svg)](https://nextjs.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](Dockerfile)
 
-This is a **free, open-source service** with usage limits to prevent abuse:
-- **10 requests/minute** • **100 requests/hour** • **500 requests/day**
-- **1,000 images/day per IP** • **50 images max per batch**
-- See [RATE_LIMITS.md](RATE_LIMITS.md) for complete details
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Try%20It%20Now-brightgreen)](http://localhost:3000)
+[![API Docs](https://img.shields.io/badge/API%20Docs-Swagger-orange)](http://localhost:8000/docs)
 
-## Key Technologies
+</div>
 
-- **BLIP** (Bootstrapping Language-Image Pre-training) for advanced image analysis
-- **FastAPI** for high-performance parallel processing with rate limiting
-- **Next.js** frontend with modern UI and bulk upload
-- **Batch processing** system for large-scale inventories
-- **IP-based rate limiting** to ensure fair usage
+---
+
+An intelligent image captioning system that generates **SEO-optimized alt-text**, **platform-specific social media captions**, and **complete SEO metadata** from a single product image. Supports both **local GPU inference** (zero cost) and **Moondream Cloud API** (no GPU required).
+
+![Architecture](https://img.shields.io/badge/Architecture-Moondream%20%2B%20BLIP%20%2B%20FastAPI-blueviolet)
+
+---
+
+## Why Choose This Project?
+
+| Feature | Benefit |
+|---------|---------|
+| **Zero-cost local GPU inference** | Run entirely on your own hardware — no API fees, no data leaves your server |
+| **Moondream Cloud fallback** | No GPU? Use Moondream Cloud API ($5 free/month) with identical quality |
+| **Production-grade security** | Rate limiting, input sanitization, timing-safe auth, request size enforcement |
+| **Batch processing** | Process up to 50 images in parallel with real-time progress tracking |
+| **5 platforms at once** | Instagram, Twitter, Facebook, LinkedIn, Pinterest — optimized per platform |
+| **SEO metadata included** | Filename, title tag, meta description, Open Graph, Schema.org markup |
+| **Docker-ready** | One command to deploy: `docker-compose up` |
+| **100% open source** | MIT license, no vendor lock-in |
+
+---
+
+## Who Is This For?
+
+- **E-commerce developers** — Auto-generate alt-text and SEO metadata for product catalogs
+- **Social media managers** — Create platform-optimized captions with hashtags in bulk
+- **Accessibility compliance officers** — Meet WCAG alt-text requirements at scale
+- **SEO agencies** — Generate optimized metadata for client image assets
+- **Dropshippers & resellers** — Process large product image inventories quickly
+
+---
+
+## Quick Start
+
+### Option 1: Docker (Recommended)
+
+```bash
+git clone https://github.com/Dynamic-Web-Lab/dynamicweblab-ai-image-caption.git
+cd dynamicweblab-ai-image-caption
+cp .env.example .env   # Edit with your settings
+docker-compose up -d
+```
+
+- API: `http://localhost:8000`
+- Frontend: `http://localhost:3000`
+- Swagger docs: `http://localhost:8000/docs`
+
+### Option 2: Local Setup
+
+```bash
+git clone https://github.com/Dynamic-Web-Lab/dynamicweblab-ai-image-caption.git
+cd dynamicweblab-ai-image-caption
+
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+cp .env.example .env       # Edit with your settings
+
+python main.py             # Backend on :8000
+```
+
+In a second terminal for the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev                # Frontend on :3000
+```
+
+---
 
 ## Features
 
 ### 1. Alt-Text Generation
-Automatic generation of descriptive, keyword-rich alt-text for product images, improving both accessibility and SEO.
 
-**Example:** "Red A-line cotton dress with floral pattern"
+Descriptive, keyword-rich alt-text for accessibility and SEO.
 
-**Key Features:**
-- Multiple length variations (short, medium, standard)
-- SEO score calculation
+- Multiple length variations (short, medium, standard, descriptive)
+- SEO score calculation (0-100)
 - Keyword integration
-- Accessibility-focused descriptions
+- WCAG-compliant descriptions
+
+**Example:** `"Red A-line cotton dress with floral pattern"`
 
 ### 2. Social Media Captions
-Engaging, platform-optimized captions with relevant hashtags. According to research, 71% of online shoppers consider product images essential in purchasing decisions.
 
-**Supported Platforms:**
-- Instagram (up to 2,200 characters)
-- Twitter (up to 280 characters)
-- Facebook (up to 63,206 characters)
-- LinkedIn (up to 3,000 characters)
-- Pinterest (up to 500 characters)
+Platform-optimized captions with hashtags and CTAs.
 
-**Key Features:**
-- Platform-specific optimization
-- Intelligent hashtag generation
-- Call-to-action integration
-- Engagement score prediction
+| Platform | Max Length | Optimal Hashtags |
+|----------|-----------|-----------------|
+| Instagram | 2,200 chars | 11 |
+| Twitter | 280 chars | 1 |
+| Facebook | 63,206 chars | 2 |
+| LinkedIn | 3,000 chars | 3 |
+| Pinterest | 500 chars | 10 |
+
+Features: brand voice selection, engagement score prediction, CTA integration.
 
 ### 3. SEO Optimization
-Keyword integration for improved search visibility and organic traffic generation through intelligent content optimization.
 
-**Key Features:**
+Complete metadata package for search visibility.
+
 - SEO-friendly filename generation
-- Title tag optimization
-- Meta description generation
+- Title tag (50-60 chars optimal)
+- Meta description (150-160 chars optimal)
 - Open Graph tags for social sharing
-- Schema.org markup
-- Keyword analysis and recommendations
+- Schema.org JSON-LD markup
+- Keyword density analysis & recommendations
 
 ### 4. Batch Processing
-Process up to 50 images simultaneously with real-time progress tracking and export capabilities.
 
-**Key Features:**
-- Parallel processing with configurable concurrency (5 concurrent tasks)
-- Real-time progress updates with polling
-- CSV and JSON export options
-- Success/failure tracking per image
-- Estimated completion time
-- Automatic retry logic
-- Rate limit compliance (max 50 images per batch)
+Process up to 50 images in parallel.
 
-## Installation
+- Semaphore-based concurrency (5 concurrent tasks)
+- Real-time progress tracking with ETA
+- CSV and JSON export
+- Per-image success/failure tracking
+- Automatic cleanup after processing
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
+### 5. Image Analysis
 
-### Setup
+Base analysis using Moondream or BLIP vision models.
 
-1. **Clone the repository:**
-```bash
-git clone https://github.com/maidulcu/dynamicweblab-ai-image-caption.git
-cd dynamicweblab-ai-image-caption
-```
+- Dominant color detection
+- Object/element recognition
+- Image dimensions and orientation
+- Multi-model support (Moondream Cloud, Moondream Local, BLIP)
 
-2. **Create a virtual environment:**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+---
 
-3. **Install dependencies:**
-```bash
-pip install -r requirements.txt
-```
+## API Endpoints
 
-4. **Configure environment variables:**
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/generate/complete` | Full package: alt-text + captions + SEO |
+| `POST` | `/api/v1/generate/alt-text` | Alt-text only |
+| `POST` | `/api/v1/generate/social-caption` | Single platform caption |
+| `POST` | `/api/v1/generate/seo-metadata` | SEO metadata only |
+| `POST` | `/api/v1/analyze` | Raw image analysis |
+| `POST` | `/api/v1/batch/upload` | Batch process multiple images |
+| `GET` | `/api/v1/batch/status/{id}` | Check batch progress |
+| `GET` | `/api/v1/batch/results/{id}` | Get batch results |
+| `GET` | `/api/v1/batch/export/{id}?format=csv` | Export as CSV/JSON |
+| `GET` | `/api/v1/rate-limit/status` | Your rate limit quota |
+| `GET` | `/api/v1/health` | Health check |
+| `GET` | `/api/v1/platforms` | Supported platforms |
 
-5. **Run the backend:**
-```bash
-python main.py
-```
+### Example: Generate Complete Package
 
-The API will be available at `http://localhost:8000`
-
-6. **Run the Next.js frontend (optional):**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend will be available at `http://localhost:3000`
-
-## Usage
-
-### Web Interfaces
-
-**Legacy HTML Interface** (`http://localhost:8000`):
-1. Upload an image
-2. Enter product details (optional)
-3. Add SEO keywords (optional)
-4. Generate complete package with one click
-
-**Next.js Frontend** (`http://localhost:3000`):
-- **Home Page**: Feature overview and navigation
-- **Single Upload** (`/single`): Process individual images with full product details
-- **Batch Upload** (`/batch`): Upload up to 100 images with drag-and-drop, real-time progress tracking, and CSV/JSON export
-
-### API Endpoints
-
-#### 1. Generate Complete Package
-```bash
-POST /api/v1/generate/complete
-```
-
-**Parameters:**
-- `image` (file): Image file
-- `keywords` (string, optional): Comma-separated keywords
-- `product_name` (string, optional): Product name
-- `product_category` (string, optional): Product category
-- `product_brand` (string, optional): Brand name
-- `product_material` (string, optional): Material type
-- `platforms` (string, optional): Comma-separated platforms (default: instagram,facebook,twitter)
-
-**Example:**
 ```bash
 curl -X POST "http://localhost:8000/api/v1/generate/complete" \
   -F "image=@product.jpg" \
@@ -161,6 +175,7 @@ curl -X POST "http://localhost:8000/api/v1/generate/complete" \
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -186,279 +201,199 @@ curl -X POST "http://localhost:8000/api/v1/generate/complete" \
 }
 ```
 
-#### 2. Generate Alt-Text Only
-```bash
-POST /api/v1/generate/alt-text
-```
+Full API documentation: `http://localhost:8000/docs` (Swagger UI)
 
-#### 3. Generate Social Caption
-```bash
-POST /api/v1/generate/social-caption
-```
-
-**Additional Parameters:**
-- `platform` (required): instagram, twitter, facebook, linkedin, or pinterest
-- `brand_voice` (optional): casual_engaging, concise_witty, professional
-- `custom_message` (optional): Custom message to include
-
-#### 4. Generate SEO Metadata
-```bash
-POST /api/v1/generate/seo-metadata
-```
-
-#### 5. Analyze Image
-```bash
-POST /api/v1/analyze
-```
-
-Returns base image analysis including detected colors, elements, and dimensions.
-
-#### 6. List Platforms
-```bash
-GET /api/v1/platforms
-```
-
-Returns list of supported social media platforms.
-
-#### 7. Health Check
-```bash
-GET /api/v1/health
-```
-
-#### 8. Batch Upload (Process Multiple Images)
-```bash
-POST /api/v1/batch/upload
-```
-
-**Parameters:**
-- `images` (files): List of image files (max 100)
-- `keywords` (string, optional): Comma-separated keywords
-- `platforms` (string): Comma-separated platforms (default: instagram,facebook,twitter)
-
-**Response:**
-```json
-{
-  "success": true,
-  "batch_id": "uuid-here",
-  "total_images": 25,
-  "status": "processing"
-}
-```
-
-#### 9. Check Batch Status
-```bash
-GET /api/v1/batch/status/{batch_id}
-```
-
-**Response:**
-```json
-{
-  "batch_id": "uuid",
-  "status": "processing",
-  "progress": {
-    "total": 25,
-    "processed": 15,
-    "successful": 14,
-    "failed": 1,
-    "percentage": 60,
-    "estimated_completion": "30s"
-  }
-}
-```
-
-#### 10. Get Batch Results
-```bash
-GET /api/v1/batch/results/{batch_id}
-```
-
-Returns complete results for all processed images.
-
-#### 11. Export Batch Results
-```bash
-GET /api/v1/batch/export/{batch_id}?format=csv
-```
-
-Download results as CSV or JSON file.
-
-#### 12. Check Rate Limit Status
-```bash
-GET /api/v1/rate-limit/status
-```
-
-Returns your current rate limit quota and usage.
+---
 
 ## Rate Limits
 
-This is a free service with IP-based rate limiting:
+Free, no-login service with IP-based rate limiting:
 
-| Limit Type | Free Tier |
-|-----------|-----------|
+| Limit | Free Tier |
+|-------|-----------|
 | Requests per minute | 10 |
 | Requests per hour | 100 |
 | Requests per day | 500 |
 | Images per day | 1,000 |
 | Max batch size | 50 |
 
-**Rate limit headers** are included in all responses:
+Rate limit headers are included in every response. See [RATE_LIMITS.md](RATE_LIMITS.md) for details, error handling, and best practices.
+
+---
+
+## Security
+
+This project implements production-grade security measures:
+
+- **Timing-safe authentication** — `hmac.compare_digest()` for admin API key validation
+- **Input sanitization** — HTML stripping, length limits, UUID-only batch IDs
+- **File upload security** — MIME validation, size limits, UUID-prefixed filenames, path traversal prevention
+- **Rate limiting** — IP-based with persistent storage across restarts
+- **Request size enforcement** — Streaming body check (not just Content-Length header)
+- **Security headers** — CSP, X-Frame-Options, X-Content-Type-Options, Permissions-Policy
+- **No secrets in code** — All credentials via environment variables
+- **Error sanitization** — Internal errors never exposed to clients
+
+See [SECURITY_FIXES.md](SECURITY_FIXES.md) and [MEDIUM_SECURITY_ISSUES.md](MEDIUM_SECURITY_ISSUES.md) for the full security audit.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | FastAPI (Python) with async support |
+| **AI/ML** | Moondream 2 (primary), BLIP (fallback), HuggingFace Transformers, PyTorch |
+| **Image Processing** | Pillow, OpenCV |
+| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-dropzone |
+| **Deployment** | Docker, Docker Compose |
+| **Security** | Rate limiting, input validation, secure file handling |
+
+---
+
+## Model Configuration
+
+The system supports three vision model backends, tried in order:
+
+1. **Moondream Cloud API** — Best quality, requires API key, $5 free/month
+2. **Moondream Local (GPU)** — Free, runs on CUDA/MPS/CPU, same model weights
+3. **BLIP (Fallback)** — Always available, lower quality, larger model size
+
+Configure in `.env`:
+
+```env
+USE_MOONDREAM=True
+MOONDREAM_API_KEY=          # Optional: enables cloud API
+MOONDREAM_MODEL=vikhyatk/moondream2
+MOONDREAM_REVISION=2025-06-21
+CAPTION_MODEL=Salesforce/blip-image-captioning-large
 ```
-X-RateLimit-Remaining-Minute: 8
-X-RateLimit-Remaining-Hour: 95
-X-RateLimit-Remaining-Day: 487
-X-RateLimit-Images-Remaining: 950
-```
 
-See [RATE_LIMITS.md](RATE_LIMITS.md) for complete documentation on rate limits, best practices, and handling rate limit errors.
-
-## API Documentation
-
-Interactive API documentation is available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Technology Stack
-
-- **Backend:** FastAPI (Python) with async support
-- **AI/ML:**
-  - HuggingFace Transformers
-  - BLIP (Bootstrapping Language-Image Pre-training)
-  - PyTorch (with GPU acceleration)
-- **Image Processing:** PIL, OpenCV
-- **Frontend:**
-  - Next.js 14 (App Router) with TypeScript
-  - Tailwind CSS for styling
-  - react-dropzone for drag-and-drop
-  - Legacy HTML/CSS/JavaScript interface
-- **Batch Processing:** Asyncio with semaphore-based concurrency control
+---
 
 ## Project Structure
 
 ```
 dynamicweblab-ai-image-caption/
-├── core/
-│   ├── __init__.py
-│   ├── image_analyzer.py          # Core image analysis engine (BLIP)
-│   ├── alt_text_generator.py      # Alt-text generation
-│   ├── social_caption_generator.py # Social media captions
-│   ├── seo_optimizer.py           # SEO metadata optimization
-│   └── batch_processor.py         # Batch processing with progress tracking
 ├── api/
 │   ├── __init__.py
-│   └── routes.py                  # API endpoints (single + batch)
-├── frontend/                      # Next.js frontend
+│   └── routes.py              # All API endpoints
+├── core/
+│   ├── __init__.py
+│   ├── image_analyzer.py      # Vision model abstraction
+│   ├── alt_text_generator.py  # Alt-text generation
+│   ├── social_caption_generator.py  # Platform-specific captions
+│   ├── seo_optimizer.py       # SEO metadata optimization
+│   ├── batch_processor.py     # Parallel batch processing
+│   └── rate_limiter.py        # IP-based rate limiting
+├── middleware/
+│   ├── __init__.py
+│   ├── rate_limit_middleware.py    # Rate limit enforcement
+│   ├── security_headers.py        # CSP, X-Frame-Options, etc.
+│   └── request_size_limit.py      # Body size enforcement
+├── utils/
+│   ├── __init__.py
+│   ├── security.py            # File validation, input sanitization
+│   └── executor.py            # Thread pool for AI operations
+├── frontend/                  # Next.js 14 frontend
 │   ├── app/
-│   │   ├── page.tsx              # Home page
-│   │   ├── single/
-│   │   │   └── page.tsx          # Single image upload
-│   │   └── batch/
-│   │       └── page.tsx          # Bulk upload with progress
-│   ├── package.json
-│   └── README.md
+│   │   ├── page.tsx           # Home
+│   │   ├── single/page.tsx    # Single image upload
+│   │   └── batch/page.tsx     # Batch upload with progress
+│   └── package.json
 ├── static/
-│   └── index.html                 # Legacy web interface
-├── uploads/                       # Temporary upload directory
-├── batch_results/                 # Batch export directory
-├── config.py                      # Configuration management
-├── main.py                        # FastAPI application
-├── requirements.txt               # Python dependencies
-├── .env.example                   # Environment variables template
-├── Dockerfile                     # Docker configuration
-├── docker-compose.yml             # Docker Compose setup
-└── README.md                      # This file
+│   └── index.html             # Legacy web interface
+├── uploads/                   # Temporary upload directory
+├── batch_results/             # Persisted batch results
+├── config.py                  # Settings via environment variables
+├── main.py                    # FastAPI application entry point
+├── requirements.txt           # Python dependencies
+├── .env.example               # Environment template
+├── Dockerfile
+├── docker-compose.yml
+├── SECURITY_FIXES.md          # Security audit report
+├── RATE_LIMITS.md             # Rate limit documentation
+└── README.md
 ```
+
+---
 
 ## Configuration
 
-Edit `.env` file to customize settings:
+All settings are configured via environment variables (see `.env.example`):
 
 ```env
-# API Configuration
-API_HOST=0.0.0.0
+# Server
+API_HOST=127.0.0.1
 API_PORT=8000
-DEBUG=True
+DEBUG=False
 
-# Model Configuration
-CAPTION_MODEL=Salesforce/blip-image-captioning-large
+# AI Models
+USE_MOONDREAM=True
+MOONDREAM_API_KEY=              # Optional cloud API
+ANTHROPIC_API_KEY=              # Optional Claude captions
 USE_CLAUDE_API=False
 
-# SEO Configuration
-DEFAULT_KEYWORDS=product,shop,buy,online,quality
-MAX_ALT_TEXT_LENGTH=125
+# Security
+ADMIN_API_KEY=<generate-a-random-key>
+ALLOWED_ORIGINS=http://localhost:3000
+TRUST_PROXY_HEADERS=False
 
-# Social Media Configuration
-INSTAGRAM_MAX_LENGTH=2200
-TWITTER_MAX_LENGTH=280
-FACEBOOK_MAX_LENGTH=63206
+# Rate Limits
+RATE_LIMIT_ENABLED=True
+REQUESTS_PER_MINUTE=10
+REQUESTS_PER_HOUR=100
+REQUESTS_PER_DAY=500
+IMAGES_PER_DAY=1000
+BATCH_LIMIT=50
 ```
 
-## Performance
-
-- **Processing Time:** 2-5 seconds per image (depending on hardware)
-- **GPU Acceleration:** Automatically uses CUDA if available
-- **Batch Processing:**
-  - Up to 50 images per batch (free tier limit)
-  - 5 concurrent processing tasks (configurable)
-  - Real-time progress tracking every 2 seconds
-  - Estimated completion time calculation
-  - ~2-5 minutes for 50 images
-- **Rate Limiting:** IP-based with minimal overhead
-- **Concurrent Requests:** FastAPI async support
-- **Scalability:** Horizontal scaling with load balancers
-
-## Best Practices
-
-### Alt-Text
-- Keep between 50-125 characters for optimal SEO
-- Include primary keyword naturally
-- Describe the image accurately
-- Avoid "image of" or "picture of" prefixes
-
-### Social Media Captions
-- Use platform-specific optimal lengths
-- Include 1-3 relevant hashtags (varies by platform)
-- Add clear call-to-action
-- Match your brand voice
-
-### SEO Metadata
-- Use descriptive filenames with hyphens
-- Include target keywords naturally
-- Write compelling meta descriptions
-- Implement Schema.org markup
+---
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Submit a pull request
+4. Run tests (`pytest`)
+5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions:
-- GitHub Issues: [Create an issue](https://github.com/maidulcu/dynamicweblab-ai-image-caption/issues)
-- Email: support@dynamicweblab.com
-
-## Acknowledgments
-
-- BLIP model by Salesforce Research
-- HuggingFace Transformers library
-- FastAPI framework
+---
 
 ## Roadmap
 
-- [ ] Batch processing API
+- [x] Batch processing with parallel execution
+- [x] Moondream Cloud + Local GPU support
+- [x] Production security hardening
+- [x] Next.js frontend with drag-and-drop
+- [x] Rate limiting with persistent storage
 - [ ] Multiple language support
-- [ ] Custom model training
-- [ ] Integration with e-commerce platforms
+- [ ] Custom model fine-tuning
+- [ ] E-commerce platform integrations (Shopify, WooCommerce)
 - [ ] Advanced analytics dashboard
 - [ ] A/B testing for captions
-- [ ] Brand voice customization
+- [ ] Brand voice customization profiles
 - [ ] Image editing suggestions
 
 ---
 
-**Built with ❤️ by DynamicWebLab**
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## Support
+
+- **Issues:** [GitHub Issues](https://github.com/Dynamic-Web-Lab/dynamicweblab-ai-image-caption/issues)
+- **Email:** support@dynamicweblab.com
+
+---
+
+<div align="center">
+
+**Built by [DynamicWebLab](https://dynamicweblab.com)**
+
+</div>

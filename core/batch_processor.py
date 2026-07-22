@@ -11,6 +11,9 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# Directory for persisting batch results across restarts
+BATCH_RESULTS_DIR = Path("batch_results")
+
 
 class BatchProcessor:
     """Process multiple images in batches with progress tracking."""
@@ -23,6 +26,36 @@ class BatchProcessor:
         """
         self.max_concurrent = max_concurrent
         self.active_batches = {}
+        BATCH_RESULTS_DIR.mkdir(exist_ok=True)
+        self._load_persisted_batches()
+
+    def _load_persisted_batches(self):
+        """Load previously completed batch results from disk."""
+        try:
+            for batch_file in BATCH_RESULTS_DIR.glob("batch_*.json"):
+                try:
+                    with open(batch_file, 'r') as f:
+                        batch_data = json.load(f)
+                        batch_id = batch_data.get("batch_id")
+                        if batch_id and batch_data.get("status") == "completed":
+                            self.active_batches[batch_id] = batch_data
+                except Exception as e:
+                    logger.warning(f"Failed to load persisted batch {batch_file}: {e}")
+        except Exception as e:
+            logger.error(f"Error loading persisted batches: {e}")
+
+    def _persist_batch(self, batch_id: str):
+        """Persist completed batch results to disk for recovery across restarts."""
+        batch_data = self.active_batches.get(batch_id)
+        if not batch_data or batch_data.get("status") != "completed":
+            return
+        try:
+            output_path = BATCH_RESULTS_DIR / f"batch_{batch_id}.json"
+            with open(output_path, 'w') as f:
+                json.dump(batch_data, f, indent=2, default=str)
+            logger.info(f"Persisted batch {batch_id} to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to persist batch {batch_id}: {e}")
 
     async def process_batch(
         self,
@@ -131,6 +164,9 @@ class BatchProcessor:
             batch_data["end_time"] = datetime.utcnow().isoformat()
             batch_data["status"] = "completed"
 
+            # Persist to disk for recovery across restarts
+            self._persist_batch(batch_id)
+
             return batch_data
 
         finally:
@@ -171,16 +207,13 @@ class BatchProcessor:
         if not batch_data:
             return None
 
-        output_dir = Path("batch_results")
-        output_dir.mkdir(exist_ok=True)
-
         if output_format == "json":
-            output_path = output_dir / f"batch_{batch_id}.json"
+            output_path = BATCH_RESULTS_DIR / f"batch_{batch_id}.json"
             with open(output_path, 'w') as f:
                 json.dump(batch_data, f, indent=2)
 
         elif output_format == "csv":
-            output_path = output_dir / f"batch_{batch_id}.csv"
+            output_path = BATCH_RESULTS_DIR / f"batch_{batch_id}.csv"
             with open(output_path, 'w', newline='') as f:
                 writer = csv.writer(f)
 

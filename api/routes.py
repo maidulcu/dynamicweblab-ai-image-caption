@@ -1,5 +1,6 @@
 """API routes for the image caption service - SECURITY HARDENED."""
 import os
+import hmac
 import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Header
 from fastapi.responses import JSONResponse, FileResponse
@@ -515,12 +516,6 @@ async def generate_complete_package(
                 logger.error(f"Cleanup failed: {cleanup_error}")
 
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "AI Image Caption API"}
-
-
 @router.get("/platforms")
 async def list_platforms():
     """List supported social media platforms."""
@@ -576,7 +571,7 @@ async def admin_analytics(request: Request, authorization: str = Header(None)):
         logger.error("SECURITY: Admin API accessed but ADMIN_API_KEY not configured")
         raise HTTPException(status_code=503, detail="Admin API not configured")
 
-    if token != settings.admin_api_key:
+    if not hmac.compare_digest(token, settings.admin_api_key or ""):
         logger.warning(f"SECURITY: Failed admin authentication from {client_ip}")
         raise HTTPException(status_code=403, detail="Invalid credentials")
 

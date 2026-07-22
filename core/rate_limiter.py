@@ -60,6 +60,9 @@ class RateLimiter:
                         lambda: {"count": 0, "date": None},
                         data.get("image_count", {})
                     )
+                    self.blocked_ips = {
+                        ip: datetime.fromisoformat(t) for ip, t in data.get("blocked_ips", {}).items()
+                    }
             except Exception as e:
                 logger.error(f"Error loading analytics: {e}")
 
@@ -70,6 +73,7 @@ class RateLimiter:
                 json.dump({
                     "request_history": dict(self.request_history),
                     "image_count": dict(self.image_count),
+                    "blocked_ips": {ip: t.isoformat() for ip, t in self.blocked_ips.items()},
                     "last_updated": datetime.utcnow().isoformat()
                 }, f, indent=2)
         except Exception as e:
@@ -160,9 +164,8 @@ class RateLimiter:
             if len(self.request_history) % 1000 == 0:
                 self._cleanup_old_data()
 
-            # Save analytics periodically
-            if len(self.request_history[ip]) % 10 == 0:
-                self.save_analytics()
+            # Save analytics on every request for persistence across restarts
+            self.save_analytics()
 
     async def block_ip(self, ip: str, duration_minutes: int = 60):
         """Temporarily block an IP.
